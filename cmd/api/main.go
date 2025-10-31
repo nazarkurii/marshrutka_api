@@ -5,7 +5,9 @@ import (
 	"maryan_api/internal/infrastructure/clients/stripe"
 	dataStore "maryan_api/internal/infrastructure/persistence"
 	"maryan_api/internal/infrastructure/router"
+	"maryan_api/pkg/languages"
 	"maryan_api/pkg/timezone"
+
 	"net/http"
 
 	"github.com/gin-contrib/cors"
@@ -27,6 +29,8 @@ func main() {
 		AllowHeaders: []string{"Authorization", "Content-Type", "X-Email-Access-Token", "X-Customer-Update-Token"},
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	}))
+
+	server.Use(languages.GinMiddlewear)
 	client := http.DefaultClient
 	router.RegisterRoutes(server, db, client)
 	server.Static("/imgs", "../../static/imgs")
