@@ -12,6 +12,19 @@ import (
 )
 
 func CreateTestData(db *gorm.DB) {
+	db.Exec(`
+INSERT INTO countries (id, name) VALUES
+(UUID_TO_BIN(UUID()), 'Poland'),
+(UUID_TO_BIN(UUID()), 'Germany'),
+(UUID_TO_BIN(UUID()), 'Czechia'),
+(UUID_TO_BIN(UUID()), 'Estonia'),
+(UUID_TO_BIN(UUID()), 'Latvia'),
+(UUID_TO_BIN(UUID()), 'Lithuania'),
+(UUID_TO_BIN(UUID()), 'Slovakia'),
+(UUID_TO_BIN(UUID()), 'Hungary'),
+(UUID_TO_BIN(UUID()), 'Ukraine');
+`)
+	config.LoadCountries(db)
 	drivers := entity.TestDrivers()
 	err := db.Create(drivers).Error
 	if err != nil {
@@ -54,14 +67,18 @@ func CreateTestData(db *gorm.DB) {
 					Price:                (rand.Intn(250) + 100) * 100,
 					DepartureCountryID:   ukraineID,
 					DestinationCountryID: countryID,
-					DepartureTime:        departureTime,
-					ArrivalTime:          departureTime.Add(time.Hour*15 + time.Hour*time.Duration(rand.Intn(20))),
+					DepartureTime:        departureTime.UTC(),
+					ArrivalTime:          departureTime.Add(time.Hour*15 + time.Hour*time.Duration(rand.Intn(20))).UTC(),
 					BusID:                buses[busIndex].ID,
 					Updates: []entity.ConnectionUpdate{{
 						ConnectionID: outboundConnectionID,
 						Status:       entity.RegisteredConnectionStatus,
 					}},
-					Type: entity.ComertialConnectionType,
+					Type:              entity.ComertialConnectionType,
+					SellBefore:        departureTime.Add(-time.Hour * 24).UTC(),
+					BackpackPrice:     2000,
+					SmallLuggagePrice: 3000,
+					LargeLuggagePrice: 6000,
 				},
 				ReturnConnection: entity.Connection{
 					ID:                   returnConnectionID,
@@ -69,14 +86,18 @@ func CreateTestData(db *gorm.DB) {
 					Price:                (rand.Intn(250) + 100) * 100,
 					DepartureCountryID:   countryID,
 					DestinationCountryID: ukraineID,
-					DepartureTime:        departureTime.Add(time.Hour * 60),
-					ArrivalTime:          departureTime.Add(time.Hour*60 + time.Hour*15 + time.Hour*time.Duration(rand.Intn(20))),
+					DepartureTime:        departureTime.Add(time.Hour * 60).UTC(),
+					ArrivalTime:          departureTime.Add(time.Hour*60 + time.Hour*15 + time.Hour*time.Duration(rand.Intn(20))).UTC(),
 					BusID:                buses[busIndex].ID,
 					Updates: []entity.ConnectionUpdate{{
 						ConnectionID: returnConnectionID,
 						Status:       entity.RegisteredConnectionStatus,
 					}},
-					Type: entity.ComertialConnectionType,
+					Type:              entity.ComertialConnectionType,
+					SellBefore:        departureTime.Add(time.Hour * 36).UTC().UTC(),
+					BackpackPrice:     2000,
+					SmallLuggagePrice: 3000,
+					LargeLuggagePrice: 6000,
 				},
 				Updates: []entity.TripUpdate{{
 					TripID: tripiID,

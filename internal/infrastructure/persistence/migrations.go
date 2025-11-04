@@ -19,6 +19,7 @@ func Migrate(db *gorm.DB) error {
 	errCheck(entity.MigrateBus(db))
 	errCheck(entity.MigratePassenger(db))
 	errCheck(entity.MigrateAddress(db))
+	errCheck(entity.MigratePackage(db))
 	errCheck(entity.MigrateTrip(db))
 	errCheck(valueobject.MigrateVerifications(db))
 	errCheck(log.Migrate(db))

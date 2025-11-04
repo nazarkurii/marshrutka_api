@@ -14,7 +14,7 @@ import (
 func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
 	customerRouter := ginutil.CreateAuthRouter("/customer", auth.Customer.SecretKey(), s)
 
-	customerHandler := newHandler(service.NewTicketService(repo.NewTicketRepo(db)))
+	customerHandler := newHandler(service.NewTicketService(repo.NewTicketRepo(db), client))
 
 	//-----------------------Ticket Routes---------------------------------------
 

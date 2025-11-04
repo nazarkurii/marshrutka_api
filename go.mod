@@ -2,7 +2,6 @@ module maryan_api
 
 go 1.23.0
 
-
 require (
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.30.0
@@ -52,6 +51,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/stripe/stripe-go v70.15.0+incompatible // indirect
 	github.com/stripe/stripe-go/v76 v76.25.0 // indirect

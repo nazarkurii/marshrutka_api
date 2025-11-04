@@ -13,7 +13,7 @@ import (
 )
 
 type Ticket interface {
-	Create(ctx context.Context, ticket []*entity.Ticket) error
+	Create(ctx context.Context, ticket *entity.Ticket) error
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Ticket, error)
 	GetTickets(ctx context.Context, pagination dbutil.Pagination) ([]entity.Ticket, []entity.Connection, int, error, bool)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -21,8 +21,10 @@ type Ticket interface {
 	ChangePassenger(ctx context.Context, id, passengerID uuid.UUID) error
 	Complete(ctx context.Context, id uuid.UUID) error
 	DeleteTickets(ctx context.Context, paymentSessionID string) error
-	CreateStopsAccordingToTickets(ctx context.Context, paymentSessionID string) error
-	RemoveStopsAccordingToTickets(ctx context.Context, paymentSessionID string) error
+	CreatePassengerStops(ctx context.Context, paymentSessionID string) error
+	CreatePackageStops(ctx context.Context, paymentSessionID string) error
+	RemovePassengerStops(ctx context.Context, paymentSessionID string) error
+	RemovePackageStops(ctx context.Context, paymentSessionID string) error
 	PaymentSucceeded(ctx context.Context, paymentSessionID string) error
 }
 
@@ -34,7 +36,11 @@ func (ds *ticketMySQL) PaymentSucceeded(ctx context.Context, paymentSessionID st
 	return dbutil.PossibleRawsAffectedError(ds.db.Table("ticket_payments").Where("session_id = ?", paymentSessionID).Update("succeeded", true))
 }
 
-func (ds *ticketMySQL) CreateStopsAccordingToTickets(ctx context.Context, paymentSessionID string) error {
+func (ds *ticketMySQL) CreatePackageStops(ctx context.Context, paymentSessionID string) error {
+	return nil
+}
+
+func (ds *ticketMySQL) CreatePassengerStops(ctx context.Context, paymentSessionID string) error {
 	var tickets []entity.Ticket
 	err := dbutil.PossibleRawsAffectedError(ds.db.WithContext(ctx).
 		Where("id IN  (SELECT ticket_id FROM ticket_payments WHERE session_id = ?)", paymentSessionID).
@@ -48,10 +54,14 @@ func (ds *ticketMySQL) CreateStopsAccordingToTickets(ctx context.Context, paymen
 	for _, ticket := range tickets {
 		id := uuid.New()
 		stops = append(stops, &entity.Stop{
-			ID:           id,
-			TicketID:     ticket.ID,
+			ID: id,
+			TicketID: uuid.NullUUID{
+				ticket.ID,
+				true,
+			},
 			ConnectionID: ticket.ConnectionID,
-			Type:         entity.PickUpStopType,
+			LocationType: entity.PickUpStopType,
+			Type:         entity.PassengerStopType,
 			Updates: []entity.StopUpdate{
 				{
 					StopID: id,
@@ -62,10 +72,14 @@ func (ds *ticketMySQL) CreateStopsAccordingToTickets(ctx context.Context, paymen
 
 		id = uuid.New()
 		stops = append(stops, &entity.Stop{
-			ID:           id,
-			TicketID:     ticket.ID,
+			ID: id,
+			TicketID: uuid.NullUUID{
+				ticket.ID,
+				true,
+			},
 			ConnectionID: ticket.ConnectionID,
-			Type:         entity.DropOffStopType,
+			LocationType: entity.DropOffStopType,
+			Type:         entity.PassengerStopType,
 			Updates: []entity.StopUpdate{
 				{
 					StopID: id,
@@ -78,7 +92,11 @@ func (ds *ticketMySQL) CreateStopsAccordingToTickets(ctx context.Context, paymen
 	return dbutil.PossibleCreateError(ds.db.WithContext(ctx).Create(stops), "non-existing-connection")
 }
 
-func (ds *ticketMySQL) RemoveStopsAccordingToTickets(ctx context.Context, paymentSessionID string) error {
+func (ds *ticketMySQL) RemovePackageStops(ctx context.Context, paymentSessionID string) error {
+	return nil
+}
+
+func (ds *ticketMySQL) RemovePassengerStops(ctx context.Context, paymentSessionID string) error {
 	err := dbutil.PossibleRawsAffectedError(ds.db.Unscoped().Table("stop_updates").Where("stop_id IN (SELECT id FROM stops WHERE ticket_id IN (SELECT ticket_id FROM ticket_payments WHERE session_id = ?))", paymentSessionID).Delete(&entity.Stop{}), "non-existing-data")
 	if err != nil {
 		return err
@@ -143,9 +161,9 @@ func (ds *ticketMySQL) DeleteTickets(ctx context.Context, paymentSessionID strin
 	})
 }
 
-func (ds *ticketMySQL) Create(ctx context.Context, tickets []*entity.Ticket) error {
+func (ds *ticketMySQL) Create(ctx context.Context, ticket *entity.Ticket) error {
 
-	return dbutil.PossibleCreateError(ds.db.WithContext(ctx).Create(tickets), "ticket-data")
+	return dbutil.PossibleCreateError(ds.db.WithContext(ctx).Session(&gorm.Session{FullSaveAssociations: true}).Create(ticket), "ticket-data")
 }
 
 func (ds *ticketMySQL) GetByID(ctx context.Context, id uuid.UUID) (entity.Ticket, error) {

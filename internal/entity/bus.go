@@ -27,6 +27,7 @@ type Bus struct {
 	CreatedAt          time.Time      `gorm:"not null"                                   `
 	UpdatedAt          time.Time      `gorm:"not null"                                   `
 	DeletedAt          gorm.DeletedAt `gorm:"index"                                      `
+	LuggageVolume      luggage        `gorm:"type:MEDIUMINT UNSIGNED;not null"`
 }
 
 //

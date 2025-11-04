@@ -7,7 +7,6 @@ import (
 	"maryan_api/internal/infrastructure/router"
 	"maryan_api/pkg/languages"
 	"maryan_api/pkg/timezone"
-
 	"net/http"
 
 	"github.com/gin-contrib/cors"
@@ -26,14 +25,14 @@ func main() {
 	server := gin.Default()
 	server.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{"Authorization", "Content-Type", "X-Email-Access-Token", "X-Customer-Update-Token"},
+		AllowHeaders: []string{"Authorization", "Content-Type", "X-Email-Access-Token", "X-Customer-Update-Token", "Content-Language"},
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	}))
 
 	server.Use(languages.GinMiddlewear)
 	client := http.DefaultClient
 	router.RegisterRoutes(server, db, client)
-	server.Static("/imgs", "../../static/imgs")
+	server.Static("/imgs", "../../static/images")
 	server.GET("", func(ctx *gin.Context) {
 		ctx.JSON(
 			http.StatusOK, struct {
@@ -45,6 +44,6 @@ func main() {
 	})
 	gin.SetMode(gin.ReleaseMode)
 
-	//testdata.CreateTestData(db)
+	// testdata.CreateTestData(db)
 	server.Run(":9990")
 }

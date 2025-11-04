@@ -36,10 +36,17 @@ type Connection struct {
 	Updates   []ConnectionUpdate `gorm:"not null" json:"updates"`
 
 	Type connectionType `gorm:"type:enum('Comertial','Special Asignment','Break Down Return', 'Break Down Replacement'); not null" json:"type"`
+
+	SellBefore        time.Time `gorm:"not null" json:"sellBefore"`
+	BackpackPrice     int       `gorm:"type:MEDIUMINT;not null" json:"backpackPrice"`
+	SmallLuggagePrice int       `gorm:"type:MEDIUMINT;not null" json:"smallLuggagePrice"`
+	LargeLuggagePrice int       `gorm:"type:MEDIUMINT;not null" json:"largeLuggagePrice"`
 }
 
 func (c *Connection) AfterFind(tx *gorm.DB) (err error) {
+
 	c.EstimatedDuration = int(c.ArrivalTime.Sub(c.DepartureTime).Minutes())
+
 	return
 }
 
@@ -101,12 +108,15 @@ const (
 )
 
 type Stop struct {
-	ID           uuid.UUID    `gorm:"type:binary(16);primaryKey"                         json:"id"`
-	TicketID     uuid.UUID    `gorm:"type:binary(16);not null"                                     json:"-"`
-	Ticket       Ticket       `gorm:"foreignKey:TicketID"                          json:"ticket"`
-	ConnectionID uuid.UUID    `gorm:"type:binary(16);not null"                                     json:"-"`
-	Type         stopType     `gorm:"type:enum('Pick-up','Drop-off')"              json:"type"`
-	Updates      []StopUpdate `gorm:"constraint:OnDelete:CASCADE"                                                 json:"updates"`
+	ID           uuid.UUID        `gorm:"type:binary(16);primaryKey"                         json:"id"`
+	TicketID     uuid.NullUUID    `gorm:"type:binary(16)"                                     json:"-"`
+	Ticket       Ticket           `gorm:"foreignKey:TicketID"                          json:"ticket"`
+	PackageID    uuid.NullUUID    `gorm:"type:binary(16)"                                     json:"-"`
+	Package      Package          `gorm:"foreignKey:PackageID"                          json:"package"`
+	ConnectionID uuid.UUID        `gorm:"type:binary(16);not null"                                     json:"-"`
+	Type         stopType         `gorm:"type:enum('Passenger','Package')"              json:"type"`
+	LocationType stopLocationType `gorm:"type:enum('Pick-up','Drop-off')"              json:"locationType"`
+	Updates      []StopUpdate     `gorm:"constraint:OnDelete:CASCADE"                                                 json:"updates"`
 }
 
 type stopType string
@@ -117,10 +127,14 @@ type StopUpdate struct {
 	CreatedAt time.Time  `gorm:"not null"                                        json:"createdAt"`
 }
 type stopStatus string
+type stopLocationType string
 
 const (
-	PickUpStopType  stopType = "Pick-up"
-	DropOffStopType stopType = "Drop-off"
+	PassengerStopType stopType = "Passenger"
+	PackageStopType   stopType = "Package"
+
+	PickUpStopType  stopLocationType = "Pick-up"
+	DropOffStopType stopLocationType = "Drop-off"
 
 	ConfirmedStopStatus stopStatus = "Confirmed"
 	MissedStopStatus    stopStatus = "Missed"
@@ -166,15 +180,17 @@ func (c *Connection) PrepareNew() {
 //
 
 func (c *Connection) Simplify() ConnectionSimplified {
+
 	return ConnectionSimplified{
 		ID:                 c.ID,
 		Price:              c.Price,
 		DepartureCountry:   c.DepartureCountry.Name,
 		DestinationCountry: c.DestinationCountry.Name,
-		DepartureTime:      c.DepartureTime,
-		ArrivalTime:        c.ArrivalTime,
+		DepartureTime:      config.MustParseToLocal(c.DepartureTime, c.DepartureCountry.Name),
+		ArrivalTime:        config.MustParseToLocal(c.ArrivalTime, c.DestinationCountry.Name),
 		Line:               c.Line,
 		EstimatedDuration:  c.EstimatedDuration,
+		SellBefore:         c.SellBefore,
 	}
 }
 
@@ -183,14 +199,22 @@ type CustomerConnection struct {
 	GoogleMapsConnectionURL string      `json:"googleMapsConnectionURL"`
 	Bus                     CustomerBus `json:"bus"`
 	Stops                   []Stop      `json:"stops"`
+	LuggageVolumeLeft       uint        `json:"luggageVolumeLeft"`
+	BackpackPrice           int         `json:"backpackPrice"`
+	SmallLuggagePrice       int         `json:"smallLuggagePrice"`
+	LargeLuggagePrice       int         `json:"largeLuggagePrice"`
 }
 
-func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID) CustomerConnection {
+func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID, luggageVolume uint) CustomerConnection {
 	return CustomerConnection{
 		ConnectionSimplified:    c.Simplify(),
 		GoogleMapsConnectionURL: c.GoogleMapsURL,
 		Bus:                     c.Bus.ToCustomerBus(takenSeatsIDs),
 		Stops:                   c.Stops,
+		LuggageVolumeLeft:       luggageVolume,
+		BackpackPrice:           c.BackpackPrice,
+		SmallLuggagePrice:       c.SmallLuggagePrice,
+		LargeLuggagePrice:       c.LargeLuggagePrice,
 	}
 }
 
@@ -219,11 +243,6 @@ type FindConnectionsRequestJSON struct {
 
 func (r FindConnectionsRequestJSON) Parse() (FindConnectionsRequest, rfc7807.InvalidParams) {
 	var invalidParams rfc7807.InvalidParams
-
-	date, err := time.Parse("2006-01-02", r.Date)
-	if err != nil {
-		invalidParams.SetInvalidParam("date", err.Error())
-	}
 
 	adults, err := strconv.Atoi(r.Adults)
 	if err != nil {
@@ -260,14 +279,19 @@ func (r FindConnectionsRequestJSON) Parse() (FindConnectionsRequest, rfc7807.Inv
 		return FindConnectionsRequest{}, invalidParams
 	}
 
-	fromID, exists := config.CountryExists(r.From)
-	if !exists {
-		invalidParams.SetInvalidParam("from", "Non-existing country")
+	fromID, timeLocation, err := config.ParseCountry(r.From)
+	if err != nil {
+		invalidParams.SetInvalidParam("from", err.Error())
 	}
 
-	toID, exists := config.CountryExists(r.To)
-	if !exists {
-		invalidParams.SetInvalidParam("to", "Non-existing country")
+	toID, _, err := config.ParseCountry(r.To)
+	if err != nil {
+		invalidParams.SetInvalidParam("from", err.Error())
+	}
+
+	date, err := time.ParseInLocation("2006-01-02", r.Date, timeLocation)
+	if err != nil {
+		invalidParams.SetInvalidParam("date", err.Error())
 	}
 
 	return FindConnectionsRequest{
@@ -313,11 +337,13 @@ type ConnectionSimplified struct {
 	DepartureTime      time.Time `json:"departureTime"`
 	ArrivalTime        time.Time `json:"arrivalTime"`
 	EstimatedDuration  int       `json:"estimatedDuration"`
+	SellBefore         time.Time `json:"sellBefore"`
 }
 
 type ConnectionsRange struct {
-	Date      time.Time `json:"date"`
-	Available bool      `json:"available"`
-	Number    int       `json:"number"`
-	MinPrice  int       `json:"minPrice"`
+	Date       time.Time `gorm:"column:date" json:"date"`
+	Available  bool      `json:"available"`
+	SellBefore time.Time `gorm:"column:sellBefore" json:"-"`
+	Number     int       `gorm:"column:number" json:"number"`
+	MinPrice   int       `gorm:"column:minPrice" json:"minPrice"`
 }

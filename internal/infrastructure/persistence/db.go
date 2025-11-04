@@ -10,11 +10,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// SET @schema = DATABASE();
+
+// SET SESSION group_concat_max_len = 1000000;
+
+// SELECT CONCAT('DROP TABLE ', GROUP_CONCAT(CONCAT('`', table_name, '`'))) INTO @drop_sql
+// FROM information_schema.tables
+// WHERE table_schema = @schema;
+
+// PREPARE stmt FROM @drop_sql;
+// EXECUTE stmt;
+// DEALLOCATE PREPARE stmt;
+
 func Init() *gorm.DB {
 
 	connection := config.DB()
 	db, err := gorm.Open(mysql.New(mysql.Config{
-		DSN: fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		DSN: fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=UTC",
 			connection.User,
 			connection.Password,
 			connection.Host,
@@ -29,6 +41,7 @@ func Init() *gorm.DB {
 		panic("Could not connect to the database")
 	}
 
+	// createImges(db)
 	return db
 }
 
@@ -49,3 +62,15 @@ func NewMockDB() (*gorm.DB, sqlmock.Sqlmock) {
 
 	return gormDB, mock
 }
+
+// func createImges(db *gorm.DB) {
+// 	var buses []entity.Bus
+// 	db.Find(&buses)
+
+// 	for _, bus := range buses{
+// 		db.Create(&entity.BusImage{
+// 			BusID: bus.ID,
+// 			Url: "/imgs/bus1.",
+// 		})
+// 	}
+// }

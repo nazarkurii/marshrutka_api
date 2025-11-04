@@ -2,6 +2,7 @@ package dataStore
 
 import (
 	"context"
+	"maryan_api/config"
 	"maryan_api/internal/entity"
 	"maryan_api/pkg/dbutil"
 	"time"
@@ -12,7 +13,7 @@ import (
 )
 
 type Connection interface {
-	GetByID(ctx context.Context, id uuid.UUID) (entity.Connection, []uuid.UUID, error)
+	GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error)
 	GetConnections(ctx context.Context, pagination dbutil.Pagination) ([]entity.Connection, int, error, bool)
 	ChangeDepartureTime(ctx context.Context, id uuid.UUID, departureTime time.Time) error
 	ChangeGoogleMapsURL(ctx context.Context, id uuid.UUID, url string) error
@@ -88,7 +89,8 @@ func (ds *connectionMySQL) findBaseConnections(
 		ds.db.WithContext(ctx).
 			Preload(clause.Associations).
 			Where(
-				"DATE(departure_time) = ? AND destination_country_id = ? AND departure_country_id = ?",
+				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) = ? AND destination_country_id = ? AND departure_country_id = ?",
+				config.MustGetLocationFromCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
@@ -136,11 +138,13 @@ func (ds *connectionMySQL) findLeftRange(
 			Select(
 				"DATE(departure_time) AS date",
 				"COUNT(id) AS number",
-				"MIN(price) AS min_price",
+				"MIN(price) AS minPrice",
+				"MAX(sell_before) AS sellBefore",
 			).
 			Where(
-				"DATE(departure_time) < DATE(?) AND destination_country_id = ? AND departure_country_id = ?",
-				request.Date,
+				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) < DATE(?) AND destination_country_id = ? AND departure_country_id = ?",
+				config.MustGetLocationFromCountryID(request.From).String(),
+				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
 			).
@@ -162,11 +166,13 @@ func (ds *connectionMySQL) findRightRange(
 			Select(
 				"DATE(departure_time) AS date",
 				"COUNT(id) AS number",
-				"MIN(price) AS min_price",
+				"MIN(price) AS minPrice",
+				"MAX(sell_before) AS sellBefore",
 			).
 			Where(
-				"DATE(departure_time) > ? AND destination_country_id = ? AND departure_country_id = ?",
-				request.Date,
+				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) > ? AND destination_country_id = ? AND departure_country_id = ?",
+				config.MustGetLocationFromCountryID(request.From).String(),
+				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
 			).
@@ -177,16 +183,36 @@ func (ds *connectionMySQL) findRightRange(
 	)
 }
 
-func (ds *connectionMySQL) GetByID(ctx context.Context, id uuid.UUID) (entity.Connection, []uuid.UUID, error) {
+func (ds *connectionMySQL) GetByID(ctx context.Context, id uuid.UUID, passengersNumber int) (entity.Connection, []uuid.UUID, uint, error) {
 	var connection = entity.Connection{ID: id}
 	err := dbutil.PossibleFirstError(dbutil.Preload(ds.db, entity.PreloadConnection()...).WithContext(ctx).First(&connection), "non-existing-connection")
 	if err != nil {
-		return entity.Connection{}, nil, err
+		return entity.Connection{}, nil, 0, err
 	}
 
 	var takenSeatsIDs []uuid.UUID
+	err = dbutil.PossibleDbError(ds.db.WithContext(ctx).Table("ticket_seats").Where("ticket_id in (SELECT id FROM tickets WHERE connection_id = ?)", connection.ID).Select("seat_id").Scan(&takenSeatsIDs))
+	if err != nil {
+		return entity.Connection{}, nil, 0, err
+	}
 
-	return connection, takenSeatsIDs, dbutil.PossibleDbError(ds.db.WithContext(ctx).Table("tickets").Where("connection_id = ?", id).Select("seat_id").Scan(&takenSeatsIDs))
+	var luggageVolumeLeft uint
+	err = dbutil.PossibleDbError(ds.db.WithContext(ctx).Raw(`SELECT
+    CAST(luggage_volume - (IFNULL((SELECT SUM(luggage_volume)
+                                   FROM tickets
+                                   WHERE connection_id = ?), 0)) - (IFNULL((SELECT SUM(luggage_volume)
+                                   FROM packages
+                                   WHERE connection_id = ?), 0))
+         - ? AS UNSIGNED) AS remaining
+FROM buses
+WHERE id = ?;
+`, connection.ID, connection.ID, (len(connection.Bus.Seats)-len(takenSeatsIDs)-passengersNumber)*int(entity.LargeLuggage), connection.Bus.ID).Scan(&luggageVolumeLeft))
+
+	if err != nil {
+		return entity.Connection{}, nil, 0, err
+	}
+
+	return connection, takenSeatsIDs, luggageVolumeLeft, nil
 }
 
 func (ds *connectionMySQL) GetConnections(ctx context.Context, pagination dbutil.Pagination) ([]entity.Connection, int, error, bool) {

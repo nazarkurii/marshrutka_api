@@ -119,3 +119,7 @@ func PaymentSecretKey() []byte {
 func GoogleSecretKey() string {
 	return mustGetEnv("GOOGLE_CLIENT_SECRET")
 }
+
+func GooglePlacesApiKey() string {
+	return mustGetEnv("GOOGLE_PLACES_API_KEY")
+}

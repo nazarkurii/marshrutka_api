@@ -10,7 +10,7 @@ import (
 
 type Passenger struct {
 	ID        uuid.UUID      `gorm:"type:binary(16); primaryKey;"         json:"id"`
-	UserID    uuid.UUID      `gorm:"type:binary(16);"                     json:"-"`
+	TicketID  uuid.UUID      `gorm:"type:binary(16);not null;"         json:"ticketId"`
 	FirstName string         `gorm:"type:varchar(255); not null"    json:"firstName"`
 	LastName  string         `gorm:"type:varchar(255); not null"    json:"lastName"`
 	CreatedAt time.Time      `gorm:"not null"                       json:"-"`
@@ -35,12 +35,12 @@ func (p NewPassenger) Parse() Passenger {
 	}
 }
 
-func (p *Passenger) Prepare(userID uuid.UUID) rfc7807.InvalidParams {
+func (p *Passenger) Prepare(ticketID uuid.UUID) rfc7807.InvalidParams {
 	params := p.Validate()
 
 	if params == nil {
 		p.ID = uuid.New()
-		p.UserID = userID
+		p.TicketID = ticketID
 	}
 
 	return params

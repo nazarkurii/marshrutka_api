@@ -1,8 +1,10 @@
 package entity
 
 import (
+	"context"
 	googleMaps "maryan_api/internal/infrastructure/clients/google/maps"
 	rfc7807 "maryan_api/pkg/problem"
+	"net/http"
 	"time"
 
 	"github.com/d3code/uuid"
@@ -18,14 +20,15 @@ type Address struct {
 	Street          string         `gorm:"type:varchar(255);not null" json:"street"`
 	HouseNumber     string         `gorm:"type:varchar(15);not null" json:"houseNumber"`
 	ApartmentNumber string         `gorm:"type:varchar(15)" json:"apartmentNumber"`
-	GoogleMapsLink  string         `gorm:"type:varchar(255);not null" json:"googleMapsLink"`
+	GoogleMapsID    string         `gorm:"type:varchar(255);not null" json:"googleMapsID"`
+	FormatedAdress  string         `gorm:"type:varchar(500);not null" json:"formatedAdress"`
 	CreatedAt       time.Time      `gorm:"not null" json:"-"`
 	DeletedAt       gorm.DeletedAt `json:"-"`
 }
 
 type Country struct {
 	ID   uuid.UUID `gorm:"type:binary(16);primaryKey"                       `
-	Name string    `gorm:"type:varchar(50);not null"`
+	Name string    `gorm:"type:varchar(50);not null; UNIQUE"`
 }
 
 type NewAddress struct {
@@ -33,6 +36,8 @@ type NewAddress struct {
 	Street          string `json:"street"`
 	HouseNumber     string `json:"houseNumber"`
 	ApartmentNumber string `json:"apartmentNumber"`
+	GoogleMapsID    string `json:"googleMapsID"`
+	FormatedAdress  string ` json:"formatedAdress"`
 }
 
 func (address NewAddress) ToAddress(countryID uuid.UUID) Address {
@@ -42,6 +47,8 @@ func (address NewAddress) ToAddress(countryID uuid.UUID) Address {
 		Street:          address.Street,
 		HouseNumber:     address.HouseNumber,
 		ApartmentNumber: address.ApartmentNumber,
+		GoogleMapsID:    address.GoogleMapsID,
+		FormatedAdress:  address.FormatedAdress,
 	}
 
 }
@@ -58,21 +65,21 @@ func (a Address) Validate() rfc7807.InvalidParams {
 		params.SetInvalidParam("houseNumber", "Invalid house number.")
 	}
 
-	if err := googleMaps.VerifyAdressLink(a.GoogleMapsLink); err != nil {
-		params.SetInvalidParam("GoogleMapsLink", err.Error())
-	}
-
 	return params
 }
 
-func (a *Address) Prepare(userID uuid.UUID) error {
+func (a *Address) Prepare(context context.Context, client *http.Client) error {
 	params := a.Validate()
 
 	if params != nil {
 		return rfc7807.BadRequest("invalid-Address-data", "Invalid Address Data Error", "Provided asress data is not valid.", params...)
 	}
 
-	a.UserID = userID
+	err := googleMaps.VerifyAdressID(context, client, a.GoogleMapsID)
+	if err != nil {
+		return err
+	}
+
 	a.ID = uuid.New()
 	return nil
 }

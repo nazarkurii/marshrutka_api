@@ -61,4 +61,4 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hemFyYWRtaW5AZ21haWwuY29tIiw
 
 
 
-1.Ticket payment status
+1.Availablity

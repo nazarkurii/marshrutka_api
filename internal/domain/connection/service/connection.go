@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"maryan_api/config"
 	"maryan_api/internal/domain/connection/repo"
 	"maryan_api/internal/entity"
 	dataStore "maryan_api/internal/infrastructure/persistence"
@@ -21,7 +22,7 @@ type AdminConnection interface {
 }
 
 type CustomerConnection interface {
-	GetByID(ctx context.Context, id string) (entity.CustomerConnection, error)
+	GetByID(ctx context.Context, id string, passengerNumber int) (entity.CustomerConnection, error)
 	GetConnections(ctx context.Context, userID uuid.UUID, pagination dbutil.PaginationStr, complete string) ([]entity.CustomerConnection, hypermedia.Links, error)
 	FindConnections(ctx context.Context, request entity.FindConnectionsRequestJSON) (entity.FindConnectionsResponse, error)
 }
@@ -55,7 +56,7 @@ func (c *connectionService) FindConnections(ctx context.Context, requestJSON ent
 			ConnectionSimplified: connection.Simplify(),
 			TicketsLeft:          int(ticketsLeft.Number),
 			Fits:                 int(ticketsLeft.Number)-request.Adults-request.Children-request.Teenagers >= 0,
-			Available:            connection.DepartureTime.Before(time.Now()),
+			Available:            config.MustParseToLocal(time.Now(), connection.DepartureCountry.Name).UTC().Before(connection.SellBefore),
 		}
 	}
 
@@ -64,7 +65,8 @@ func (c *connectionService) FindConnections(ctx context.Context, requestJSON ent
 	for i := 0; i < request.Range; i++ {
 		if i < length {
 			response.LeftRange[i] = found.LeftRange[i]
-			response.LeftRange[i].Available = !response.LeftRange[i].Date.Before(time.Now())
+			response.LeftRange[i].Available = !response.LeftRange[i].SellBefore.Before(config.MustParseToLocalByUUID(time.Now(), request.From).UTC())
+			response.LeftRange[i].Date = response.LeftRange[i].Date.In(config.MustGetLocationFromCountryID(request.From))
 		} else if i == 0 {
 			response.LeftRange[i] = entity.ConnectionsRange{
 				Date: request.Date.Add(-24 * time.Hour),
@@ -81,7 +83,8 @@ func (c *connectionService) FindConnections(ctx context.Context, requestJSON ent
 	for i := 0; i < request.Range; i++ {
 		if i < length {
 			response.RightRange[i] = found.RightRange[i]
-			response.RightRange[i].Available = true
+			response.RightRange[i].Available = !response.RightRange[i].SellBefore.Before(config.MustParseToLocalByUUID(time.Now(), request.From).UTC())
+			response.RightRange[i].Date = response.RightRange[i].Date.In(config.MustGetLocationFromCountryID(request.From))
 		} else if i == 0 {
 			response.RightRange[i] = entity.ConnectionsRange{
 				Date: request.Date.Add(24 * time.Hour),
@@ -95,13 +98,13 @@ func (c *connectionService) FindConnections(ctx context.Context, requestJSON ent
 	return response, nil
 }
 
-func (c *connectionService) getByID(ctx context.Context, idStr string) (entity.Connection, []uuid.UUID, error) {
+func (c *connectionService) getByID(ctx context.Context, idStr string, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error) {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return entity.Connection{}, nil, rfc7807.UUID(err.Error())
+		return entity.Connection{}, nil, 0, rfc7807.UUID(err.Error())
 	}
 
-	return c.repo.GetByID(ctx, id)
+	return c.repo.GetByID(ctx, id, passengerNumber)
 }
 
 func (c *connectionService) getConnections(ctx context.Context, paginationStr dbutil.PaginationStr, completed string, condition dbutil.Condition) ([]entity.Connection, hypermedia.Links, error) {
@@ -141,7 +144,7 @@ type customerService struct {
 //-------------------------Interface implementation--------------------------------
 
 func (c *adminService) GetByID(ctx context.Context, idStr string) (entity.Connection, error) {
-	connection, _, err := c.getByID(ctx, idStr)
+	connection, _, _, err := c.getByID(ctx, idStr, 0)
 	return connection, err
 }
 
@@ -169,15 +172,15 @@ func (c *adminService) RegisterUpdate(ctx context.Context, update entity.Connect
 	return c.repo.RegisterUpdate(ctx, &update)
 }
 
-func (c *customerService) GetByID(ctx context.Context, connectionIDStr string) (entity.CustomerConnection, error) {
+func (c *customerService) GetByID(ctx context.Context, connectionIDStr string, passengerNumber int) (entity.CustomerConnection, error) {
 
-	connection, takedSeatsIDs, err := c.getByID(ctx, connectionIDStr)
+	connection, takedSeatsIDs, luggageVolumeLeft, err := c.getByID(ctx, connectionIDStr, passengerNumber)
 
 	if err != nil {
 		return entity.CustomerConnection{}, err
 	}
 
-	return connection.ToCustomer(takedSeatsIDs), nil
+	return connection.ToCustomer(takedSeatsIDs, luggageVolumeLeft), nil
 }
 
 func (c *customerService) GetConnections(ctx context.Context, userID uuid.UUID, paginationStr dbutil.PaginationStr, completed string) ([]entity.CustomerConnection, hypermedia.Links, error) {
@@ -188,7 +191,7 @@ func (c *customerService) GetConnections(ctx context.Context, userID uuid.UUID, 
 
 	var connectionsCustomer = make([]entity.CustomerConnection, len(connections))
 	for i, connection := range connections {
-		connectionsCustomer[i] = connection.ToCustomer(nil)
+		connectionsCustomer[i] = connection.ToCustomer(nil, 0)
 	}
 
 	return connectionsCustomer, urls, nil
