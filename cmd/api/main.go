@@ -44,6 +44,5 @@ func main() {
 	})
 	gin.SetMode(gin.ReleaseMode)
 
-	// testdata.CreateTestData(db)
 	server.Run(":9990")
 }

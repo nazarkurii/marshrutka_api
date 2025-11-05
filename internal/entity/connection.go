@@ -111,8 +111,8 @@ type Stop struct {
 	ID           uuid.UUID        `gorm:"type:binary(16);primaryKey"                         json:"id"`
 	TicketID     uuid.NullUUID    `gorm:"type:binary(16)"                                     json:"-"`
 	Ticket       Ticket           `gorm:"foreignKey:TicketID"                          json:"ticket"`
-	PackageID    uuid.NullUUID    `gorm:"type:binary(16)"                                     json:"-"`
-	Package      Package          `gorm:"foreignKey:PackageID"                          json:"package"`
+	ParcelID     uuid.NullUUID    `gorm:"type:binary(16)"                                     json:"-"`
+	Parcel       Parcel           `gorm:"foreignKey:ParcelID"                          json:"package"`
 	ConnectionID uuid.UUID        `gorm:"type:binary(16);not null"                                     json:"-"`
 	Type         stopType         `gorm:"type:enum('Passenger','Package')"              json:"type"`
 	LocationType stopLocationType `gorm:"type:enum('Pick-up','Drop-off')"              json:"locationType"`
@@ -176,7 +176,7 @@ func (c *Connection) PrepareNew() {
 //
 //
 //
-//
+//cd
 //
 
 func (c *Connection) Simplify() ConnectionSimplified {

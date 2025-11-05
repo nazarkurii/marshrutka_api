@@ -166,3 +166,14 @@ func (pStr PaginationStr) parseWithParams(search []string, orderBy ...string) (P
 
 	return pagination, params
 }
+
+func (p *Pagination) Where(condition string, value ...any) Pagination {
+	if len(p.Condition.Where) > 0 {
+		p.Condition.Where += "AND "
+
+	}
+	p.Condition.Where += condition
+	p.Condition.Values = append(p.Condition.Values, value...)
+
+	return *p
+}

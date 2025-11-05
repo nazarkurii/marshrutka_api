@@ -544,6 +544,7 @@ func TestBuses() []Bus {
 			Structure:          []Row{row1, row2, row3, row4, row5},
 			CreatedAt:          now,
 			UpdatedAt:          now,
+			LuggageVolume:      12000000,
 		}
 	}
 

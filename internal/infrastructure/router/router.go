@@ -5,6 +5,7 @@ import (
 	bus "maryan_api/internal/domain/bus/transport/http"
 	connection "maryan_api/internal/domain/connection/transport/http"
 	"maryan_api/internal/domain/documents"
+	parcel "maryan_api/internal/domain/parcel/transport/http"
 	passenger "maryan_api/internal/domain/passenger/transport/http"
 	ticket "maryan_api/internal/domain/tickets/transport/http"
 	trip "maryan_api/internal/domain/trip/transport/http"
@@ -27,4 +28,5 @@ func RegisterRoutes(s *gin.Engine, db *gorm.DB, client *http.Client) {
 	trip.RegisterRoutes(db, s, client)
 	ticket.RegisterRoutes(db, s, client)
 	documents.RegisterRoutes(db, s, client)
+	parcel.RegisterRoutes(db, s, client)
 }

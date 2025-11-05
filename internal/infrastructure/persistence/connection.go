@@ -201,7 +201,7 @@ func (ds *connectionMySQL) GetByID(ctx context.Context, id uuid.UUID, passengers
     CAST(luggage_volume - (IFNULL((SELECT SUM(luggage_volume)
                                    FROM tickets
                                    WHERE connection_id = ?), 0)) - (IFNULL((SELECT SUM(luggage_volume)
-                                   FROM packages
+                                   FROM parcels
                                    WHERE connection_id = ?), 0))
          - ? AS UNSIGNED) AS remaining
 FROM buses

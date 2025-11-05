@@ -10,18 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// SET @schema = DATABASE();
-
-// SET SESSION group_concat_max_len = 1000000;
-
-// SELECT CONCAT('DROP TABLE ', GROUP_CONCAT(CONCAT('`', table_name, '`'))) INTO @drop_sql
-// FROM information_schema.tables
-// WHERE table_schema = @schema;
-
-// PREPARE stmt FROM @drop_sql;
-// EXECUTE stmt;
-// DEALLOCATE PREPARE stmt;
-
 func Init() *gorm.DB {
 
 	connection := config.DB()

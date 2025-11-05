@@ -26,5 +26,6 @@ func Migrate(db *gorm.DB) error {
 	errCheck(entity.MigrateTicket(db))
 
 	errCheck(entity.MigrateConnection(db))
+	// testdata.CreateTestData(db)
 	return nil
 }
