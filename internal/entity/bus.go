@@ -28,6 +28,9 @@ type Bus struct {
 	UpdatedAt          time.Time      `gorm:"not null"                                   `
 	DeletedAt          gorm.DeletedAt `gorm:"index"                                      `
 	LuggageVolume      luggage        `gorm:"type:MEDIUMINT UNSIGNED;not null"`
+	MaxWidth           uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
+	MaxHeight          uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
+	MaxLength          uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
 }
 
 //
@@ -545,6 +548,9 @@ func TestBuses() []Bus {
 			CreatedAt:          now,
 			UpdatedAt:          now,
 			LuggageVolume:      12000000,
+			MaxWidth:           200,
+			MaxHeight:          250,
+			MaxLength:          350,
 		}
 	}
 

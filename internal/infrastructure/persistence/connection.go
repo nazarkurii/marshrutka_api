@@ -2,9 +2,11 @@ package dataStore
 
 import (
 	"context"
+	"fmt"
 	"maryan_api/config"
 	"maryan_api/internal/entity"
 	"maryan_api/pkg/dbutil"
+	rfc7807 "maryan_api/pkg/problem"
 	"time"
 
 	"github.com/d3code/uuid"
@@ -13,7 +15,7 @@ import (
 )
 
 type Connection interface {
-	GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error)
+	GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, error)
 	GetConnections(ctx context.Context, pagination dbutil.Pagination) ([]entity.Connection, int, error, bool)
 	ChangeDepartureTime(ctx context.Context, id uuid.UUID, departureTime time.Time) error
 	ChangeGoogleMapsURL(ctx context.Context, id uuid.UUID, url string) error
@@ -183,36 +185,37 @@ func (ds *connectionMySQL) findRightRange(
 	)
 }
 
-func (ds *connectionMySQL) GetByID(ctx context.Context, id uuid.UUID, passengersNumber int) (entity.Connection, []uuid.UUID, uint, error) {
+func (ds *connectionMySQL) GetByID(ctx context.Context, id uuid.UUID, passengersNumber int) (entity.Connection, []uuid.UUID, error) {
 	var connection = entity.Connection{ID: id}
 	err := dbutil.PossibleFirstError(dbutil.Preload(ds.db, entity.PreloadConnection()...).WithContext(ctx).First(&connection), "non-existing-connection")
 	if err != nil {
-		return entity.Connection{}, nil, 0, err
+		return entity.Connection{}, nil, err
 	}
 
 	var takenSeatsIDs []uuid.UUID
-	err = dbutil.PossibleDbError(ds.db.WithContext(ctx).Table("ticket_seats").Where("ticket_id in (SELECT id FROM tickets WHERE connection_id = ?)", connection.ID).Select("seat_id").Scan(&takenSeatsIDs))
-	if err != nil {
-		return entity.Connection{}, nil, 0, err
+	var takenLuggageVolume uint
+	for _, stop := range connection.Stops {
+		if stop.LocationType == entity.PickUpStopType {
+
+			if stop.Type == entity.PassengerStopType {
+
+				for _, seat := range stop.Ticket.Seats {
+					takenSeatsIDs = append(takenSeatsIDs, seat.SeatID)
+				}
+			}
+
+			takenLuggageVolume += uint(stop.Ticket.LuggageVolume) + uint(stop.Parcel.LuggageVolume)
+		}
 	}
 
-	var luggageVolumeLeft uint
-	err = dbutil.PossibleDbError(ds.db.WithContext(ctx).Raw(`SELECT
-    CAST(luggage_volume - (IFNULL((SELECT SUM(luggage_volume)
-                                   FROM tickets
-                                   WHERE connection_id = ?), 0)) - (IFNULL((SELECT SUM(luggage_volume)
-                                   FROM parcels
-                                   WHERE connection_id = ?), 0))
-         - ? AS UNSIGNED) AS remaining
-FROM buses
-WHERE id = ?;
-`, connection.ID, connection.ID, (len(connection.Bus.Seats)-len(takenSeatsIDs)-passengersNumber)*int(entity.LargeLuggage), connection.Bus.ID).Scan(&luggageVolumeLeft))
-
-	if err != nil {
-		return entity.Connection{}, nil, 0, err
+	busSeats := len(connection.Bus.Seats)
+	takenSeatsLength := len(takenSeatsIDs)
+	if busSeats < passengersNumber {
+		return entity.Connection{}, nil, rfc7807.BadRequest("too-big-passengers-number", "Too Big Passengers Number Error", fmt.Sprintf("For this connections maximum is %s.", busSeats-takenSeatsLength))
 	}
+	connection.LuggageVolumeLeft = uint(connection.Bus.LuggageVolume) - takenLuggageVolume - uint((busSeats)-takenSeatsLength+passengersNumber)*(config.BackpackVolume+config.LargeLuggageVolume)
 
-	return connection, takenSeatsIDs, luggageVolumeLeft, nil
+	return connection, takenSeatsIDs, nil
 }
 
 func (ds *connectionMySQL) GetConnections(ctx context.Context, pagination dbutil.Pagination) ([]entity.Connection, int, error, bool) {

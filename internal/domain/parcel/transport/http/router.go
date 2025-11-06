@@ -3,6 +3,8 @@ package http
 import (
 	"maryan_api/internal/domain/parcel/repo"
 	"maryan_api/internal/domain/parcel/service"
+	"maryan_api/pkg/auth"
+	ginutil "maryan_api/pkg/ginutils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,15 +12,13 @@ import (
 )
 
 func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
-	// customerRouter := ginutil.CreateAuthRouter("/customer", auth.Customer.SecretKey(), s)
+	customerRouter := ginutil.CreateAuthRouter("/customer", auth.Customer.SecretKey(), s)
 
-	customerHandler := newHandler(service.NewParcelServie(repo.NewParcelRepo(db)))
+	customerHandler := newHandler(service.NewParcelService(repo.NewParcelRepo(db), client))
 
-	//-----------------------Ticket Routes---------------------------------------
-
-	// customerRouter.POST("/connection/purchase-parsel", customerHandler.purchase)
-	// customerRouter.GET("/parsels", customerHandler.getTickets)
-	s.GET("/connection/available-parsel-dates/:from/:to/:width/:height/:length", customerHandler.FindConnections)
-	// s.GET("/connection/purchase-parcel/failed/:id/:token", customerHandler.purchaseFailed)
-	// s.GET("/connection/purchase-parcel/succeded/:id/:token", customerHandler.purchaseSucceded)
+	s.GET("/connection/available-parsel-dates/:from/:to/:year/:month", customerHandler.findConnections)
+	customerRouter.POST("/connection/:id/purchase-parsel", customerHandler.purchase)
+	customerRouter.GET("/parsels", customerHandler.getParcels)
+	s.GET("/connection/purchase-parsel/failed/:id/:token", customerHandler.purchaseFailed)
+	s.GET("/connection/purchase-parsel/succeded/:id/:token", customerHandler.purchaseSucceded)
 }

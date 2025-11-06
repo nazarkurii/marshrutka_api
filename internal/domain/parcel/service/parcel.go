@@ -2,187 +2,318 @@ package service
 
 import (
 	"context"
+	"maryan_api/config"
 	"maryan_api/internal/domain/parcel/repo"
 	"maryan_api/internal/entity"
+	"maryan_api/internal/infrastructure/clients/stripe"
+	"maryan_api/pkg/auth"
 	"maryan_api/pkg/dbutil"
 	"maryan_api/pkg/hypermedia"
+	rfc7807 "maryan_api/pkg/problem"
+	"net/http"
+	"slices"
+	"time"
+
+	"github.com/d3code/uuid"
+	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/skip2/go-qrcode"
 )
 
 type Parcel interface {
-	FindConnections(ctx context.Context, request entity.FindParcelConnectionsRequest, pagination dbutil.PaginationStr) ([]entity.ConnectionSimplified, hypermedia.Links, error)
-	// Purchase(ctx context.Context, userID uuid.UUID, newTicket entity.NewTicketJSON) (string, error)
-	// PurchaseFailed(ctx context.Context, sessionID, token string) error
-	// PurchaseSucceded(ctx context.Context, sessionID, token string) error
-	// GetTickets(ctx context.Context, paginationStr dbutil.PaginationStr, userID uuid.UUID) ([]entity.CustomerTicket, hypermedia.Links, error)
+	FindConnections(ctx context.Context, request entity.FindParcelConnectionsRequest) ([]entity.ConnectionParcel, error)
+	Purchase(ctx context.Context, userID uuid.UUID, connectionID string, newParcel entity.PurchaseParcelRequest) (string, error)
+	PurchaseSucceded(ctx context.Context, sessionID, token string) error
+	PurchaseFailed(ctx context.Context, sessionID, token string) error
+	GetParcels(ctx context.Context, paginationStr dbutil.PaginationStr, userID uuid.UUID) ([]entity.CustomerParcel, hypermedia.Links, error)
 }
 
 type serviceImpl struct {
-	repo repo.Parcel
+	repo   repo.Parcel
+	client *http.Client
 }
 
-func (s *serviceImpl) FindConnections(ctx context.Context, requestUnparsed entity.FindParcelConnectionsRequest, paginationStr dbutil.PaginationStr) ([]entity.ConnectionSimplified, hypermedia.Links, error) {
+func (s *serviceImpl) fetchConnections(ctx context.Context, req entity.FindParcelConnectionsRequestParsed) ([]entity.Connection, error) {
+	connections, err := s.repo.GetConnectionsByMonth(ctx, req.From, req.To, int(req.Month), req.Year)
+	if err != nil {
+		return nil, err
+	}
+	if len(connections) < 1 {
+		return nil, rfc7807.BadRequest(
+			"calendar-unavailable-yet",
+			"Calendar Unavailable Yet Error",
+			"There has been no planning performed for this future.",
+		)
+	}
+	return connections, nil
+}
+
+func pickBestConnectionsPerDay(connections []entity.Connection) map[int]entity.Connection {
+	bestPerDay := make(map[int]entity.Connection)
+	for _, c := range connections {
+		day := config.MustParseToLocalByUUID(c.DepartureTime, c.DepartureCountryID).Day()
+		if existing, ok := bestPerDay[day]; !ok || existing.LuggageVolumeLeft < c.LuggageVolumeLeft {
+			bestPerDay[day] = c
+		}
+	}
+	return bestPerDay
+}
+
+func buildCurrentMonth(req entity.FindParcelConnectionsRequestParsed, bestPerDay map[int]entity.Connection) []entity.ConnectionParcel {
+	daysCount := daysIn(req.Month, req.Year)
+	connections := make([]entity.ConnectionParcel, daysCount)
+
+	for i := 0; i < daysCount; i++ {
+		dayNum := i + 1
+		date := time.Date(req.Year, req.Month, dayNum, 0, 0, 0, 0, config.MustGetLocationFromCountryID(req.From))
+		weekday := normalizeWeekday(date.Weekday())
+
+		if value, ok := bestPerDay[dayNum]; ok {
+			connections[i] = value.ToParcelConnection(true, weekday, dayNum, true)
+		} else {
+			connections[i] = entity.ConnectionParcel{
+				Usable:         false,
+				DayNumber:      weekday,
+				DayMonth:       dayNum,
+				IsCurrentMonth: true,
+			}
+		}
+	}
+	return connections
+}
+
+func fillPreviousMonth(connections []entity.ConnectionParcel, req entity.FindParcelConnectionsRequestParsed) []entity.ConnectionParcel {
+	firstDayNumber := connections[0].DayNumber
+	if firstDayNumber <= 1 {
+		return connections
+	}
+
+	firstDate := time.Date(req.Year, req.Month, 1, 0, 0, 0, 0, config.MustGetLocationFromCountryID(req.From))
+	daysToAdd := firstDayNumber - 1
+	monthBefore := make([]entity.ConnectionParcel, daysToAdd)
+
+	for i := daysToAdd; i >= 1; i-- {
+		dateAdded := firstDate.Add(-time.Duration(24*i) * time.Hour)
+		weekday := normalizeWeekday(dateAdded.Weekday())
+
+		monthBefore[daysToAdd-i] = entity.ConnectionParcel{
+			Usable:         false,
+			DayNumber:      weekday,
+			DayMonth:       dateAdded.Day(),
+			IsCurrentMonth: false,
+		}
+	}
+
+	return append(monthBefore, connections...)
+}
+
+func fillNextMonth(connections []entity.ConnectionParcel, req entity.FindParcelConnectionsRequestParsed) []entity.ConnectionParcel {
+	lastDayNumber := connections[len(connections)-1].DayNumber
+	if lastDayNumber >= 7 {
+		return connections
+	}
+
+	lastDate := time.Date(req.Year, req.Month, daysIn(req.Month, req.Year), 0, 0, 0, 0, config.MustGetLocationFromCountryID(req.From))
+	daysToAdd := 7 - lastDayNumber
+	monthAfter := make([]entity.ConnectionParcel, daysToAdd)
+
+	for i := 1; i <= daysToAdd; i++ {
+		dateAdded := lastDate.Add(time.Duration(24*i) * time.Hour)
+		weekday := normalizeWeekday(dateAdded.Weekday())
+
+		monthAfter[i-1] = entity.ConnectionParcel{
+			Usable:         false,
+			DayNumber:      weekday,
+			DayMonth:       dateAdded.Day(),
+			IsCurrentMonth: false, // optional: add IsNextMonth if your struct supports
+		}
+	}
+
+	return append(connections, monthAfter...)
+}
+
+func (s *serviceImpl) FindConnections(ctx context.Context, requestUnparsed entity.FindParcelConnectionsRequest) ([]entity.ConnectionParcel, error) {
 	req, err := requestUnparsed.Parse()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	pagination, err := paginationStr.Parse([]string{})
+	connections, err := s.fetchConnections(ctx, req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	connections, total, err, _ := s.repo.GetAvailableConnections(ctx, pagination, uint(req.Height*req.Length*req.Width), req.From, req.To)
-	if err != nil {
-		return nil, nil, err
-	}
+	bestPerDay := pickBestConnectionsPerDay(connections)
+	connectionsMonth := buildCurrentMonth(req, bestPerDay)
+	connectionsMonth = fillPreviousMonth(connectionsMonth, req)
+	connectionsMonth = fillNextMonth(connectionsMonth, req)
 
-	var connectionsSimplified = make([]entity.ConnectionSimplified, len(connections))
-
-	for i, connection := range connections {
-		connectionsSimplified[i] = connection.Simplify()
-	}
-
-	return connectionsSimplified, hypermedia.Pagination(paginationStr, total), nil
-
+	return connectionsMonth, nil
 }
 
-// func (s *serviceImpl) GetTickets(ctx context.Context, paginationStr dbutil.PaginationStr, userID uuid.UUID) ([]entity.CustomerTicket, hypermedia.Links, error) {
-// 	pagination, err := paginationStr.ParseWithCondition(dbutil.Condition{"user_id = ? AND (SELECT succeeded FROM ticket_payments WHERE ticket_id = `tickets`.id)", []any{userID}}, []string{}, "created_at")
-// 	if err != nil {
+func normalizeWeekday(weekday time.Weekday) int {
+	if weekday == 0 {
+		return 7
+	}
+	return int(weekday)
+}
 
-// 		return nil, nil, err
-// 	}
+func daysIn(month time.Month, year int) int {
+	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+}
 
-// 	tickets, connections, total, err, empty := s.repo.GetTickets(ctx, pagination)
-// 	if err != nil || empty {
-// 		return nil, nil, err
-// 	}
+func (s *serviceImpl) GetParcels(ctx context.Context, paginationStr dbutil.PaginationStr, userID uuid.UUID) ([]entity.CustomerParcel, hypermedia.Links, error) {
+	pagination, err := paginationStr.ParseWithCondition(dbutil.Condition{"user_id = ? AND (SELECT succeeded FROM parcel_payments WHERE parcel_id = `parcels`.id)", []any{userID}}, []string{}, "created_at")
+	if err != nil {
 
-// 	var respose = make([]entity.CustomerTicket, len(tickets))
+		return nil, nil, err
+	}
 
-// 	for i, ticket := range tickets {
-// 		connectionIndex := slices.IndexFunc(connections, func(connection entity.Connection) bool {
-// 			return connection.ID == ticket.ConnectionID
-// 		})
+	parcels, connections, total, err, empty := s.repo.GetParcels(ctx, pagination)
+	if err != nil || empty {
+		return nil, nil, err
+	}
 
-// 		if connectionIndex == -1 {
-// 			return nil, nil, rfc7807.DB("internal")
-// 		}
+	var respose = make([]entity.CustomerParcel, len(parcels))
 
-// 		respose[i] = entity.CustomerTicket{
-// 			Ticket:     ticket,
-// 			Connection: connections[connectionIndex].Simplify(),
-// 			Expired:    connections[connectionIndex].DepartureTime.Before(time.Now().UTC()),
-// 		}
-// 	}
+	for i, parcel := range parcels {
+		connectionIndex := slices.IndexFunc(connections, func(connection entity.Connection) bool {
+			return connection.ID == parcel.ConnectionID
+		})
 
-// 	return respose, hypermedia.Pagination(paginationStr, total), nil
-// }
+		if connectionIndex == -1 {
+			return nil, nil, rfc7807.DB("internal")
+		}
 
-// func (s *serviceImpl) PurchaseFailed(ctx context.Context, sessionID, token string) error {
-// 	_, err := auth.VerifyAccessToken(token, config.PaymentSecretKey())
-// 	if err != nil {
-// 		return rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized Error")
-// 	}
-// 	err = stripe.CancelPaymentIntent(sessionID)
-// 	if err != nil {
-// 		return rfc7807.BadGateway("payment-cancelation",
-// 			"Payment Cancelation Error", err.Error())
-// 	}
-// 	err = s.repo.RemovePassengerStops(ctx, sessionID)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return s.repo.DeleteTickets(ctx, sessionID)
-// }
+		respose[i] = entity.CustomerParcel{
+			Parcel:     parcel,
+			Connection: connections[connectionIndex].ToCustomer(nil),
+		}
+	}
 
-// func (s *serviceImpl) PurchaseSucceded(ctx context.Context, sessionID, token string) error {
-// 	_, err := auth.VerifyAccessToken(token, config.PaymentSecretKey())
-// 	if err != nil {
-// 		return rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized Error")
-// 	}
-// 	return s.repo.PaymentSucceeded(ctx, sessionID)
-// }
+	return respose, hypermedia.Pagination(paginationStr, total), nil
+}
 
-// func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, newTicket entity.NewTicketJSON) (string, error) {
-// 	email, phoneNumber, err := newTicket.ParseContaanctInfo()
+func (s *serviceImpl) PurchaseFailed(ctx context.Context, sessionID, token string) error {
+	_, err := auth.VerifyAccessToken(token, config.PaymentSecretKey())
+	if err != nil {
+		return rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized Error")
+	}
+	err = stripe.CancelPaymentIntent(sessionID)
+	if err != nil {
+		return rfc7807.BadGateway("payment-cancelation",
+			"Payment Cancelation Error", err.Error())
+	}
+	err = s.repo.RemoveParcelStops(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	return s.repo.DeleteParcels(ctx, sessionID)
+}
 
-// 	connection, takenSeats, loggageVolumeLeft, err := s.repo.GetConnectionByID(ctx, newTicket.ConnectionID, len(newTicket.Passengers))
-// 	if err != nil {
-// 		return "", err
-// 	}
+func (s *serviceImpl) PurchaseSucceded(ctx context.Context, sessionID, token string) error {
+	_, err := auth.VerifyAccessToken(token, config.PaymentSecretKey())
+	if err != nil {
+		return rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized Error")
+	}
+	return s.repo.PaymentSucceeded(ctx, sessionID)
+}
 
-// 	ticketID := uuid.New()
+func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connectionID string, newParcel entity.PurchaseParcelRequest) (string, error) {
+	req, params := newParcel.Parse()
+	if params != nil {
+		return "", rfc7807.BadRequest("invalid-request", "Invalid Request Error", "The request is not valid.", params...)
+	}
 
-// 	seats, err := newTicket.Validate(connection, takenSeats, ticketID, loggageVolumeLeft)
-// 	if err != nil {
-// 		return "", err
-// 	}
+	connection, err := s.repo.GetConnectionByID(ctx, req.ConnectionID)
+	if err != nil {
+		return "", err
+	}
 
-// 	pickUpAdress, dropOffAdress, err := newTicket.ParseAdresses(ctx, s.client, connection.DepartureCountryID, connection.DestinationCountryID)
-// 	if err != nil {
-// 		return "", err
-// 	}
+	if connection.LuggageVolumeLeft < uint(req.Height*req.Length*req.Width) {
+		return "", rfc7807.BadRequest("too-big-lugage-volume", "Too big Luggage Volume Error", "Provided luggage params makes volume that exceeds the remainig.")
+	}
 
-// 	passengers, err := newTicket.ParsePassengers(ticketID)
-// 	if err != nil {
-// 		return "", err
-// 	}
+	pickUpAdress := req.PickUpAdress.ToAddress(connection.DepartureCountryID)
+	params = pickUpAdress.Validate()
+	dropOffAdress := req.DropOffAdress.ToAddress(connection.DepartureCountryID)
+	params = dropOffAdress.Validate()
+	if params != nil {
+		return "", rfc7807.BadRequest("invalid-request", "Invalid Request Error", "The request is not valid.", params...)
+	}
 
-// 	token, err := auth.GenerateAccessToken(config.PaymentSecretKey(), jwt.MapClaims{
-// 		"expires": time.Now().Add(time.Minute * 15).Unix(),
-// 	})
-// 	if err != nil {
-// 		return "", err
-// 	}
+	if err := pickUpAdress.Prepare(ctx, s.client); err != nil {
+		return "", err
+	}
 
-// 	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.Price+newTicket.LuggagePrice(connection.BackpackPrice, connection.SmallLuggagePrice, connection.LargeLuggagePrice))*int64(len(newTicket.SeatIDs)), token)
-// 	if err != nil {
-// 		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
-// 	}
+	if err := dropOffAdress.Prepare(ctx, s.client); err != nil {
+		return "", err
+	}
 
-// 	qrCode, err := qrcode.Encode(ticketID.String(), qrcode.Highest, 256)
-// 	if err != nil {
-// 		return "", rfc7807.Internal("QR-Code Encoding Error", err.Error())
-// 	}
+	token, err := auth.GenerateAccessToken(config.PaymentSecretKey(), jwt.MapClaims{
+		"expires": time.Now().Add(time.Minute * 15).Unix(),
+	})
+	if err != nil {
+		return "", err
+	}
 
-// 	ticket := &entity.Ticket{
-// 		ID:              ticketID,
-// 		UserID:          userID,
-// 		PhoneNumber:     phoneNumber,
-// 		Email:           email,
-// 		ConnectionID:    connection.ID,
-// 		Seats:           seats,
-// 		Passengers:      passengers,
-// 		PickUpAdressID:  pickUpAdress.ID,
-// 		PickUpAdress:    *pickUpAdress,
-// 		DropOffAdressID: dropOffAdress.ID,
-// 		DropOffAdress:   *dropOffAdress,
-// 		Payment: entity.TicketPayment{
-// 			TicketID:  ticketID,
-// 			Price:     connection.Price + newTicket.LuggagePrice(connection.BackpackPrice, connection.SmallLuggagePrice, connection.LargeLuggagePrice),
-// 			Method:    entity.PaymentMethodCard,
-// 			SessionID: sessionID,
-// 			Succeeded: false,
-// 		},
-// 		LuggageVolume: newTicket.LuggageVolume(),
-// 		QRCode:        qrCode,
-// 	}
+	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.MinimalParcelPrice+(req.Height-20)*(req.Length-20)*(req.Width-20)*(connection.ParcelPricePerTenCm/10)), token)
+	if err != nil {
+		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
+	}
 
-// 	err = s.repo.SaveTicket(ctx, ticket)
-// 	if err != nil {
-// 		return "", err
-// 	}
+	parcelID := uuid.New()
 
-// 	err = s.repo.CreatePassengerStops(ctx, sessionID)
-// 	if err != nil {
-// 		return "", err
-// 	}
-// 	return redirectURL, nil
-// }
+	qrCode, err := qrcode.Encode(parcelID.String(), qrcode.Highest, 256)
+	if err != nil {
+		return "", rfc7807.Internal("QR-Code Encoding Error", err.Error())
+	}
 
-func NewParcelServie(repo repo.Parcel) Parcel {
+	parcel := entity.Parcel{
+		ID:                  parcelID,
+		UserID:              userID,
+		ConnectionID:        connection.ID,
+		SenderPhoneNumber:   req.Sender.PhoneNumber,
+		SenderEmail:         req.Sender.Email,
+		RecieverPhoneNumber: req.Recievier.PhoneNumber,
+		RecieverEmail:       req.Recievier.Email,
+
+		SenderName:        req.Sender.FirstName,
+		SenderLastName:    req.Sender.LastName,
+		RecieverFirstName: req.Recievier.FirstName,
+		RecieverLastName:  req.Recievier.LastName,
+		PickUpAdressID:    pickUpAdress.ID,
+		PickUpAdress:      pickUpAdress,
+		DropOffAdressID:   dropOffAdress.ID,
+		DropOffAdress:     dropOffAdress,
+		Payment: entity.ParcelPayment{
+			ParcelID:  parcelID,
+			Price:     connection.MinimalParcelPrice + (req.Height-20)*(req.Length-20)*(req.Width-20)*(connection.ParcelPricePerTenCm/10),
+			Method:    entity.PaymentMethodCard,
+			SessionID: sessionID,
+		},
+		LuggageVolume: uint(req.Height * req.Length * req.Width),
+		Width:         req.Width,
+		Height:        req.Height,
+		Length:        req.Length,
+		QRCode:        qrCode,
+	}
+
+	err = s.repo.Create(ctx, &parcel)
+	if err != nil {
+		return "", err
+	}
+
+	err = s.repo.CreateParcelStops(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	return redirectURL, nil
+}
+
+func NewParcelService(repo repo.Parcel, client *http.Client) Parcel {
 	return &serviceImpl{
 		repo,
+		client,
 	}
 }

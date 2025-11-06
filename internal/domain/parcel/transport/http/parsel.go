@@ -2,15 +2,17 @@ package http
 
 import (
 	"context"
-	"fmt"
+	"maryan_api/config"
 	"maryan_api/internal/domain/parcel/service"
 	"maryan_api/internal/entity"
 	"maryan_api/pkg/dbutil"
 	ginutil "maryan_api/pkg/ginutils"
 	"maryan_api/pkg/hypermedia"
+	rfc7807 "maryan_api/pkg/problem"
 	"net/http"
 	"time"
 
+	"github.com/d3code/uuid"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,28 +24,19 @@ func newHandler(service service.Parcel) *parcelHandler {
 	return &parcelHandler{service}
 }
 
-func (ch *parcelHandler) FindConnections(ctx *gin.Context) {
+func (ch *parcelHandler) findConnections(ctx *gin.Context) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
 	defer cancel()
 
 	req := entity.FindParcelConnectionsRequest{
-		From:   ctx.Param("from"),
-		To:     ctx.Param("to"),
-		Width:  ctx.Param("width"),
-		Length: ctx.Param("length"),
-		Height: ctx.Param("height"),
+		From:  ctx.Param("from"),
+		To:    ctx.Param("to"),
+		Year:  ctx.Param("year"),
+		Month: ctx.Param("month"),
 	}
-	connections, links, err := ch.service.FindConnections(
+	connections, err := ch.service.FindConnections(
 		ctxWithTimeout,
 		req,
-		dbutil.PaginationStr{
-			Path:     fmt.Sprintf("/connection/available-parsel-dates/%s/%s/%s/%s/%s", req.From, req.To, req.Width, req.Height, req.Length),
-			Page:     ctx.DefaultQuery("page", "1"),
-			Size:     ctx.DefaultQuery("size", "9"),
-			OrderBy:  ctx.DefaultQuery("order_by", "created_at"),
-			OrderWay: ctx.DefaultQuery("order_way", "desc"),
-			Search:   ctx.DefaultQuery("search", ""),
-		},
 	)
 
 	if err != nil {
@@ -52,125 +45,123 @@ func (ch *parcelHandler) FindConnections(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, struct {
-		Connections []entity.ConnectionSimplified `json:"connections"`
-		Links       hypermedia.Links              `json:"links"`
+		Connections []entity.ConnectionParcel `json:"connections"`
 		ginutil.Response
 	}{
 		connections,
-		links,
 		ginutil.Response{
 			Message: "The connections has successfuly been found.",
 		},
 	})
 }
 
-// func (p *passengerHandler) purchase(ctx *gin.Context) {
-// 	var request entity.NewTicketJSON
+func (p *parcelHandler) purchase(ctx *gin.Context) {
+	var request entity.PurchaseParcelRequest
 
-// 	err := ctx.ShouldBindJSON(&request)
-// 	if err != nil {
+	err := ctx.ShouldBindJSON(&request)
+	if err != nil {
 
-// 		ginutil.HandlerProblemAbort(ctx, rfc7807.JSON(err.Error()))
-// 		return
-// 	}
+		ginutil.HandlerProblemAbort(ctx, rfc7807.JSON(err.Error()))
+		return
+	}
 
-// 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
-// 	defer cancel()
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
+	defer cancel()
 
-// 	redirectURL, err := p.service.Purchase(ctxWithTimeout, ctx.MustGet("userID").(uuid.UUID), request)
-// 	if err != nil {
-// 		ginutil.ServiceErrorAbort(ctx, err)
-// 		return
-// 	}
+	redirectURL, err := p.service.Purchase(ctxWithTimeout, ctx.MustGet("userID").(uuid.UUID), ctx.Param("id"), request)
+	if err != nil {
+		ginutil.ServiceErrorAbort(ctx, err)
+		return
+	}
 
-// 	ctx.JSON(http.StatusOK, ginutil.Response{
-// 		"The purchase procces has started",
-// 		hypermedia.Links{
-// 			{"redirect", hypermedia.LinkData{
-// 				Href:   redirectURL,
-// 				Method: "",
-// 			}},
-// 		},
-// 	})
-// }
+	ctx.JSON(http.StatusOK, ginutil.Response{
+		"The purchase procces has started",
+		hypermedia.Links{
+			{"redirect", hypermedia.LinkData{
+				Href:   redirectURL,
+				Method: "",
+			}},
+		},
+	})
+}
 
-// func (p *passengerHandler) purchaseSucceded(ctx *gin.Context) {
-// 	var sessionID = ctx.Param("id")
-// 	if sessionID == "" {
-// 		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
-// 		return
-// 	}
+func (p *parcelHandler) purchaseSucceded(ctx *gin.Context) {
+	var sessionID = ctx.Param("id")
+	if sessionID == "" {
+		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
+		return
+	}
 
-// 	var token = ctx.Param("token")
-// 	if token == "" {
-// 		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
-// 		return
-// 	}
+	var token = ctx.Param("token")
+	if token == "" {
+		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
+		return
+	}
 
-// 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
-// 	defer cancel()
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
+	defer cancel()
 
-// 	err := p.service.PurchaseSucceded(ctxWithTimeout, sessionID, token)
-// 	if err != nil {
-// 		ginutil.ServiceErrorAbort(ctx, err)
-// 		return
-// 	}
+	err := p.service.PurchaseSucceded(ctxWithTimeout, sessionID, token)
+	if err != nil {
+		ginutil.ServiceErrorAbort(ctx, err)
+		return
+	}
 
-// 	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/profile/tickets")
-// }
+	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/profile/parcels")
+}
 
-// func (p *passengerHandler) getTickets(ctx *gin.Context) {
+func (p *parcelHandler) getParcels(ctx *gin.Context) {
 
-// 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
-// 	defer cancel()
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
+	defer cancel()
 
-// 	tickets, links, err := p.service.GetTickets(ctxWithTimeout, dbutil.PaginationStr{
-// 		"/customer/tickets",
-// 		ctx.DefaultQuery("page", "1"),
-// 		ctx.DefaultQuery("size", "9"),
-// 		ctx.DefaultQuery("order_by", "created_at"),
-// 		ctx.DefaultQuery("order_way", "desc"),
-// 		ctx.DefaultQuery("search", ""),
-// 	}, ctx.MustGet("userID").(uuid.UUID))
+	parcels, links, err := p.service.GetParcels(ctxWithTimeout, dbutil.PaginationStr{
+		"/customer/parcels",
+		ctx.DefaultQuery("page", "1"),
+		ctx.DefaultQuery("size", "9"),
+		ctx.DefaultQuery("order_by", "created_at"),
+		ctx.DefaultQuery("order_way", "desc"),
+		ctx.DefaultQuery("search", ""),
+	}, ctx.MustGet("userID").(uuid.UUID))
 
-// 	if err != nil {
-// 		ginutil.ServiceErrorAbort(ctx, err)
-// 		return
-// 	}
+	if err != nil {
+		ginutil.ServiceErrorAbort(ctx, err)
+		return
+	}
 
-// 	ctx.JSON(http.StatusOK, struct {
-// 		ginutil.Response
-// 		Links   hypermedia.Links        `json:"links"`
-// 		Tickets []entity.CustomerTicket `json:"tickets"`
-// 	}{
-// 		ginutil.Response{
-// 			"The adresses have successfuly beeen found.",
-// 			hypermedia.Links{},
-// 		},
-// 		links,
-// 		tickets,
-// 	})
+	ctx.JSON(http.StatusOK, struct {
+		ginutil.Response
+		Links   hypermedia.Links        `json:"links"`
+		Parcels []entity.CustomerParcel `json:"tickets"`
+	}{
+		ginutil.Response{
+			"The adresses have successfuly beeen found.",
+			hypermedia.Links{},
+		},
+		links,
+		parcels,
+	})
 
-// }
+}
 
-// func (p *passengerHandler) purchaseFailed(ctx *gin.Context) {
-// 	var sessionID = ctx.Param("id")
-// 	if sessionID == "" {
-// 		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
-// 		return
-// 	}
+func (p *parcelHandler) purchaseFailed(ctx *gin.Context) {
+	var sessionID = ctx.Param("id")
+	if sessionID == "" {
+		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
+		return
+	}
 
-// 	var token = ctx.Param("token")
-// 	if token == "" {
-// 		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
-// 		return
-// 	}
+	var token = ctx.Param("token")
+	if token == "" {
+		ginutil.HandlerProblemAbort(ctx, rfc7807.Unauthorized("unauthorized", "Unauthorized Error", "Unauthorized."))
+		return
+	}
 
-// 	err := p.service.PurchaseFailed(ctx, sessionID, token)
-// 	if err != nil {
-// 		ctx.Redirect(http.StatusFound, config.FrontendURL()+"/internal-server-error")
-// 		return
-// 	}
+	err := p.service.PurchaseFailed(ctx, sessionID, token)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, config.FrontendURL()+"/internal-server-error")
+		return
+	}
 
-// 	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/connection/failed/0/0/0/true")
-// }
+	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/parcel/failed/0/0/0/true")
+}

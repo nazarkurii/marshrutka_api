@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maryan_api/internal/entity"
 	"maryan_api/pkg/dbutil"
-	"time"
 
 	"github.com/d3code/uuid"
 	"gorm.io/gorm"
@@ -16,15 +15,13 @@ type Ticket interface {
 	Create(ctx context.Context, ticket *entity.Ticket) error
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Ticket, error)
 	GetTickets(ctx context.Context, pagination dbutil.Pagination) ([]entity.Ticket, []entity.Connection, int, error, bool)
-	Delete(ctx context.Context, id uuid.UUID) error
-	ChangeConnection(ctx context.Context, id, connectionID uuid.UUID) error
-	ChangePassenger(ctx context.Context, id, passengerID uuid.UUID) error
-	Complete(ctx context.Context, id uuid.UUID) error
+	// Delete(ctx context.Context, id uuid.UUID) error
+	// ChangeConnection(ctx context.Context, id, connectionID uuid.UUID) error
+	// ChangePassenger(ctx context.Context, id, passengerID uuid.UUID) error
+	// Complete(ctx context.Context, id uuid.UUID) error
 	DeleteTickets(ctx context.Context, paymentSessionID string) error
 	CreatePassengerStops(ctx context.Context, paymentSessionID string) error
-	CreatePackageStops(ctx context.Context, paymentSessionID string) error
 	RemovePassengerStops(ctx context.Context, paymentSessionID string) error
-	RemovePackageStops(ctx context.Context, paymentSessionID string) error
 	PaymentSucceeded(ctx context.Context, paymentSessionID string) error
 }
 
@@ -34,10 +31,6 @@ type ticketMySQL struct {
 
 func (ds *ticketMySQL) PaymentSucceeded(ctx context.Context, paymentSessionID string) error {
 	return dbutil.PossibleRawsAffectedError(ds.db.Table("ticket_payments").Where("session_id = ?", paymentSessionID).Update("succeeded", true))
-}
-
-func (ds *ticketMySQL) CreatePackageStops(ctx context.Context, paymentSessionID string) error {
-	return nil
 }
 
 func (ds *ticketMySQL) CreatePassengerStops(ctx context.Context, paymentSessionID string) error {
@@ -90,10 +83,6 @@ func (ds *ticketMySQL) CreatePassengerStops(ctx context.Context, paymentSessionI
 	}
 
 	return dbutil.PossibleCreateError(ds.db.WithContext(ctx).Create(stops), "non-existing-connection")
-}
-
-func (ds *ticketMySQL) RemovePackageStops(ctx context.Context, paymentSessionID string) error {
-	return nil
 }
 
 func (ds *ticketMySQL) RemovePassengerStops(ctx context.Context, paymentSessionID string) error {
@@ -199,21 +188,21 @@ func (ds *ticketMySQL) GetTickets(ctx context.Context, pagination dbutil.Paginat
 	), false
 }
 
-func (ds *ticketMySQL) Delete(ctx context.Context, id uuid.UUID) error {
-	return dbutil.PossibleRawsAffectedError(ds.db.WithContext(ctx).Delete(&entity.Ticket{}, id), "non-existing-ticket")
-}
+// func (ds *ticketMySQL) Delete(ctx context.Context, id uuid.UUID) error {
+// 	return dbutil.PossibleRawsAffectedError(ds.db.WithContext(ctx).Delete(&entity.Ticket{}, id), "non-existing-ticket")
+// }
 
-func (ds *ticketMySQL) ChangeConnection(ctx context.Context, id, connectionID uuid.UUID) error {
-	return dbutil.PossibleForeignKeyError(ds.db.WithContext(ctx).Where("id = ?", id).Update("connection_id", connectionID), "non-existing-ticket", "non-existing-connection", "invalid-id")
-}
+// func (ds *ticketMySQL) ChangeConnection(ctx context.Context, id, connectionID uuid.UUID) error {
+// 	return dbutil.PossibleForeignKeyError(ds.db.WithContext(ctx).Where("id = ?", id).Update("connection_id", connectionID), "non-existing-ticket", "non-existing-connection", "invalid-id")
+// }
 
-func (ds *ticketMySQL) ChangePassenger(ctx context.Context, id uuid.UUID, passengerID uuid.UUID) error {
-	return dbutil.PossibleForeignKeyError(ds.db.WithContext(ctx).Where("id = ?", id).Update("passenger_id", passengerID), "non-existing-ticket", "non-existing-passenger", "invalid-id")
-}
+// func (ds *ticketMySQL) ChangePassenger(ctx context.Context, id uuid.UUID, passengerID uuid.UUID) error {
+// 	return dbutil.PossibleForeignKeyError(ds.db.WithContext(ctx).Where("id = ?", id).Update("passenger_id", passengerID), "non-existing-ticket", "non-existing-passenger", "invalid-id")
+// }
 
-func (ds *ticketMySQL) Complete(ctx context.Context, id uuid.UUID) error {
-	return dbutil.PossibleRawsAffectedError(ds.db.WithContext(ctx).Where("id = ?", id).Update("completed_at", time.Now().UTC()), "non-existing-ticket")
-}
+// func (ds *ticketMySQL) Complete(ctx context.Context, id uuid.UUID) error {
+// 	return dbutil.PossibleRawsAffectedError(ds.db.WithContext(ctx).Table("").Where("id = ?", id).Update("completed_at", time.Now().UTC()), "non-existing-ticket")
+// }
 
 func NewTicket(db *gorm.DB) Ticket {
 	return &ticketMySQL{db}

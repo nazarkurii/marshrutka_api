@@ -37,10 +37,13 @@ type Connection struct {
 
 	Type connectionType `gorm:"type:enum('Comertial','Special Asignment','Break Down Return', 'Break Down Replacement'); not null" json:"type"`
 
-	SellBefore        time.Time `gorm:"not null" json:"sellBefore"`
-	BackpackPrice     int       `gorm:"type:MEDIUMINT;not null" json:"backpackPrice"`
-	SmallLuggagePrice int       `gorm:"type:MEDIUMINT;not null" json:"smallLuggagePrice"`
-	LargeLuggagePrice int       `gorm:"type:MEDIUMINT;not null" json:"largeLuggagePrice"`
+	SellBefore          time.Time `gorm:"not null" json:"sellBefore"`
+	BackpackPrice       int       `gorm:"type:MEDIUMINT;not null" json:"backpackPrice"`
+	SmallLuggagePrice   int       `gorm:"type:MEDIUMINT;not null" json:"smallLuggagePrice"`
+	LargeLuggagePrice   int       `gorm:"type:MEDIUMINT;not null" json:"largeLuggagePrice"`
+	MinimalParcelPrice  int       `gorm:"type:MEDIUMINT;not null" json:"minimalParcelPrice"`
+	ParcelPricePerTenCm int       `gorm:"type:MEDIUMINT;not null" json:"parcelPricePerTenCm"`
+	LuggageVolumeLeft   uint      `gorm:"-"`
 }
 
 func (c *Connection) AfterFind(tx *gorm.DB) (err error) {
@@ -114,7 +117,7 @@ type Stop struct {
 	ParcelID     uuid.NullUUID    `gorm:"type:binary(16)"                                     json:"-"`
 	Parcel       Parcel           `gorm:"foreignKey:ParcelID"                          json:"package"`
 	ConnectionID uuid.UUID        `gorm:"type:binary(16);not null"                                     json:"-"`
-	Type         stopType         `gorm:"type:enum('Passenger','Package')"              json:"type"`
+	Type         stopType         `gorm:"type:enum('Passenger','Parcel')"              json:"type"`
 	LocationType stopLocationType `gorm:"type:enum('Pick-up','Drop-off')"              json:"locationType"`
 	Updates      []StopUpdate     `gorm:"constraint:OnDelete:CASCADE"                                                 json:"updates"`
 }
@@ -131,7 +134,7 @@ type stopLocationType string
 
 const (
 	PassengerStopType stopType = "Passenger"
-	PackageStopType   stopType = "Package"
+	ParcelStopType    stopType = "Parcel"
 
 	PickUpStopType  stopLocationType = "Pick-up"
 	DropOffStopType stopLocationType = "Drop-off"
@@ -186,8 +189,8 @@ func (c *Connection) Simplify() ConnectionSimplified {
 		Price:              c.Price,
 		DepartureCountry:   c.DepartureCountry.Name,
 		DestinationCountry: c.DestinationCountry.Name,
-		DepartureTime:      config.MustParseToLocal(c.DepartureTime, c.DepartureCountry.Name),
-		ArrivalTime:        config.MustParseToLocal(c.ArrivalTime, c.DestinationCountry.Name),
+		DepartureTime:      config.MustParseToLocalByUUID(c.DepartureTime, c.DepartureCountryID),
+		ArrivalTime:        config.MustParseToLocalByUUID(c.ArrivalTime, c.DestinationCountryID),
 		Line:               c.Line,
 		EstimatedDuration:  c.EstimatedDuration,
 		SellBefore:         c.SellBefore,
@@ -203,18 +206,22 @@ type CustomerConnection struct {
 	BackpackPrice           int         `json:"backpackPrice"`
 	SmallLuggagePrice       int         `json:"smallLuggagePrice"`
 	LargeLuggagePrice       int         `json:"largeLuggagePrice"`
+	MinimalParcelPrice      int         `json:"minimalParcelPrice"`
+	ParcelPricePerTenCm     int         `json:"parcelPricePerTenCm"`
 }
 
-func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID, luggageVolume uint) CustomerConnection {
+func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID) CustomerConnection {
 	return CustomerConnection{
 		ConnectionSimplified:    c.Simplify(),
 		GoogleMapsConnectionURL: c.GoogleMapsURL,
 		Bus:                     c.Bus.ToCustomerBus(takenSeatsIDs),
 		Stops:                   c.Stops,
-		LuggageVolumeLeft:       luggageVolume,
+		LuggageVolumeLeft:       c.LuggageVolumeLeft,
 		BackpackPrice:           c.BackpackPrice,
 		SmallLuggagePrice:       c.SmallLuggagePrice,
 		LargeLuggagePrice:       c.LargeLuggagePrice,
+		MinimalParcelPrice:      c.MinimalParcelPrice,
+		ParcelPricePerTenCm:     c.ParcelPricePerTenCm,
 	}
 }
 
@@ -340,10 +347,40 @@ type ConnectionSimplified struct {
 	SellBefore         time.Time `json:"sellBefore"`
 }
 
+type ConnectionParcel struct {
+	ConnectionSimplified
+	LuggageVolumeLeft   uint `json:"luggageVolumeLeft"`
+	MaxWidth            uint `json:"maxWidth"`
+	MaxHeight           uint `json:"maxHeight"`
+	MaxLength           uint `json:"maxLength"`
+	MinimalParcelPrice  int  `json:"minimalParcelPrice"`
+	ParcelPricePerTenCm int  `json:"parcelPricePerTenCm"`
+	Usable              bool `json:"usable"`
+	DayNumber           int  `json:"dayNumber"`
+	DayMonth            int  `json:"dayMonth"`
+	IsCurrentMonth      bool `json:"isCurrentMonth"`
+}
 type ConnectionsRange struct {
 	Date       time.Time `gorm:"column:date" json:"date"`
 	Available  bool      `json:"available"`
 	SellBefore time.Time `gorm:"column:sellBefore" json:"-"`
 	Number     int       `gorm:"column:number" json:"number"`
 	MinPrice   int       `gorm:"column:minPrice" json:"minPrice"`
+}
+
+func (c *Connection) ToParcelConnection(usable bool, dayNumber, dayMonth int, isCurrentMonth bool) ConnectionParcel {
+
+	return ConnectionParcel{
+		ConnectionSimplified: c.Simplify(),
+		LuggageVolumeLeft:    c.LuggageVolumeLeft,
+		MaxWidth:             c.Bus.MaxWidth,
+		MaxHeight:            c.Bus.MaxHeight,
+		MaxLength:            c.Bus.MaxLength,
+		MinimalParcelPrice:   c.MinimalParcelPrice,
+		ParcelPricePerTenCm:  c.ParcelPricePerTenCm,
+		Usable:               usable,
+		DayNumber:            dayNumber,
+		DayMonth:             dayMonth,
+		IsCurrentMonth:       isCurrentMonth,
+	}
 }

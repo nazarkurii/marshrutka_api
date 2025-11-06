@@ -9,7 +9,6 @@ import (
 	"maryan_api/pkg/hypermedia"
 	rfc7807 "maryan_api/pkg/problem"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/d3code/uuid"
@@ -24,7 +23,7 @@ func (ch *adminHandler) GetByID(ctx *gin.Context) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
 	defer cancel()
 
-	connection, err := ch.service.GetByID(ctxWithTimeout, ctx.Param("id"))
+	connection, err := ch.service.GetByID(ctxWithTimeout, ctx.Param("id"), ctx.DefaultQuery("passengers", "0"))
 	if err != nil {
 		ginutil.ServiceErrorAbort(ctx, err)
 		return
@@ -109,8 +108,7 @@ func (ch *customerHandler) GetByID(ctx *gin.Context) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
 	defer cancel()
 
-	passengers, err := strconv.Atoi(ctx.DefaultQuery("passengers", "0"))
-	connection, err := ch.service.GetByID(ctxWithTimeout, ctx.Param("id"), passengers)
+	connection, err := ch.service.GetByID(ctxWithTimeout, ctx.Param("id"), ctx.DefaultQuery("passengers", "0"))
 	if err != nil {
 		ginutil.ServiceErrorAbort(ctx, err)
 		return

@@ -92,14 +92,14 @@ func (s *serviceImpl) PurchaseSucceded(ctx context.Context, sessionID, token str
 func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, newTicket entity.NewTicketJSON) (string, error) {
 	email, phoneNumber, err := newTicket.ParseContaanctInfo()
 
-	connection, takenSeats, loggageVolumeLeft, err := s.repo.GetConnectionByID(ctx, newTicket.ConnectionID, len(newTicket.Passengers))
+	connection, takenSeats, err := s.repo.GetConnectionByID(ctx, newTicket.ConnectionID, len(newTicket.Passengers))
 	if err != nil {
 		return "", err
 	}
 
 	ticketID := uuid.New()
 
-	seats, err := newTicket.Validate(connection, takenSeats, ticketID, loggageVolumeLeft)
+	seats, err := newTicket.Validate(connection, takenSeats, ticketID, connection.LuggageVolumeLeft)
 	if err != nil {
 		return "", err
 	}

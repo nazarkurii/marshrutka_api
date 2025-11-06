@@ -10,19 +10,20 @@ import (
 	"maryan_api/pkg/hypermedia"
 	rfc7807 "maryan_api/pkg/problem"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/d3code/uuid"
 )
 
 type AdminConnection interface {
-	GetByID(ctx context.Context, id string) (entity.Connection, error)
+	GetByID(ctx context.Context, id string, passengerNumber string) (entity.Connection, error)
 	GetConnections(ctx context.Context, pagination dbutil.PaginationStr, complete string) ([]entity.ConnectionSimplified, hypermedia.Links, error)
 	RegisterUpdate(ctx context.Context, update entity.ConnectionUpdate) error
 }
 
 type CustomerConnection interface {
-	GetByID(ctx context.Context, id string, passengerNumber int) (entity.CustomerConnection, error)
+	GetByID(ctx context.Context, id string, passengerNumber string) (entity.CustomerConnection, error)
 	GetConnections(ctx context.Context, userID uuid.UUID, pagination dbutil.PaginationStr, complete string) ([]entity.CustomerConnection, hypermedia.Links, error)
 	FindConnections(ctx context.Context, request entity.FindConnectionsRequestJSON) (entity.FindConnectionsResponse, error)
 }
@@ -98,13 +99,18 @@ func (c *connectionService) FindConnections(ctx context.Context, requestJSON ent
 	return response, nil
 }
 
-func (c *connectionService) getByID(ctx context.Context, idStr string, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error) {
-	id, err := uuid.Parse(idStr)
+func (c *connectionService) getByID(ctx context.Context, idStr string, passengerNumber string) (entity.Connection, []uuid.UUID, error) {
+	passengers, err := strconv.Atoi(passengerNumber)
 	if err != nil {
-		return entity.Connection{}, nil, 0, rfc7807.UUID(err.Error())
+		return entity.Connection{}, nil, rfc7807.BadRequest("parsing", "Parsing Error", err.Error())
 	}
 
-	return c.repo.GetByID(ctx, id, passengerNumber)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return entity.Connection{}, nil, rfc7807.UUID(err.Error())
+	}
+
+	return c.repo.GetByID(ctx, id, passengers)
 }
 
 func (c *connectionService) getConnections(ctx context.Context, paginationStr dbutil.PaginationStr, completed string, condition dbutil.Condition) ([]entity.Connection, hypermedia.Links, error) {
@@ -143,8 +149,9 @@ type customerService struct {
 
 //-------------------------Interface implementation--------------------------------
 
-func (c *adminService) GetByID(ctx context.Context, idStr string) (entity.Connection, error) {
-	connection, _, _, err := c.getByID(ctx, idStr, 0)
+func (c *adminService) GetByID(ctx context.Context, idStr string, passengerNumber string) (entity.Connection, error) {
+
+	connection, _, err := c.getByID(ctx, idStr, passengerNumber)
 	return connection, err
 }
 
@@ -172,15 +179,15 @@ func (c *adminService) RegisterUpdate(ctx context.Context, update entity.Connect
 	return c.repo.RegisterUpdate(ctx, &update)
 }
 
-func (c *customerService) GetByID(ctx context.Context, connectionIDStr string, passengerNumber int) (entity.CustomerConnection, error) {
+func (c *customerService) GetByID(ctx context.Context, connectionIDStr string, passengersNumber string) (entity.CustomerConnection, error) {
 
-	connection, takedSeatsIDs, luggageVolumeLeft, err := c.getByID(ctx, connectionIDStr, passengerNumber)
+	connection, takedSeatsIDs, err := c.getByID(ctx, connectionIDStr, passengersNumber)
 
 	if err != nil {
 		return entity.CustomerConnection{}, err
 	}
 
-	return connection.ToCustomer(takedSeatsIDs, luggageVolumeLeft), nil
+	return connection.ToCustomer(takedSeatsIDs), nil
 }
 
 func (c *customerService) GetConnections(ctx context.Context, userID uuid.UUID, paginationStr dbutil.PaginationStr, completed string) ([]entity.CustomerConnection, hypermedia.Links, error) {
@@ -191,7 +198,7 @@ func (c *customerService) GetConnections(ctx context.Context, userID uuid.UUID, 
 
 	var connectionsCustomer = make([]entity.CustomerConnection, len(connections))
 	for i, connection := range connections {
-		connectionsCustomer[i] = connection.ToCustomer(nil, 0)
+		connectionsCustomer[i] = connection.ToCustomer(nil)
 	}
 
 	return connectionsCustomer, urls, nil

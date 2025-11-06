@@ -13,7 +13,7 @@ import (
 )
 
 type Connection interface {
-	GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error)
+	GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, error)
 	GetConnections(ctx context.Context, pagination dbutil.Pagination) ([]entity.Connection, int, error, bool)
 	ChangeDepartureTime(ctx context.Context, id uuid.UUID, departureTime time.Time) error
 	ChangeGoogleMapsURL(ctx context.Context, id uuid.UUID, url string) error
@@ -32,7 +32,7 @@ func (r *connectionRepo) FindConnections(ctx context.Context, request entity.Fin
 	return r.ds.FindConnections(ctx, request)
 }
 
-func (r *connectionRepo) GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error) {
+func (r *connectionRepo) GetByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, error) {
 	return r.ds.GetByID(ctx, id, passengerNumber)
 }
 

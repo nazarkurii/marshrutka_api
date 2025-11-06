@@ -11,7 +11,7 @@ import (
 )
 
 type Ticket interface {
-	GetConnectionByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error)
+	GetConnectionByID(ctx context.Context, id uuid.UUID, passengersNumber int) (entity.Connection, []uuid.UUID, error)
 	CreateAdress(ctx context.Context, a *entity.Address) error
 	CreatePassenger(ctx context.Context, p *entity.Passenger) error
 	SaveTicket(ctx context.Context, ticket *entity.Ticket) error
@@ -33,8 +33,8 @@ func (r *ticketRepo) GetTickets(ctx context.Context, pagination dbutil.Paginatio
 	return r.ticket.GetTickets(ctx, pagination)
 }
 
-func (r *ticketRepo) GetConnectionByID(ctx context.Context, id uuid.UUID, passengerNumber int) (entity.Connection, []uuid.UUID, uint, error) {
-	return r.connection.GetByID(ctx, id, passengerNumber)
+func (r *ticketRepo) GetConnectionByID(ctx context.Context, id uuid.UUID, passengersNumber int) (entity.Connection, []uuid.UUID, error) {
+	return r.connection.GetByID(ctx, id, passengersNumber)
 }
 
 func (r *ticketRepo) DeleteTickets(ctx context.Context, paymentSessionID string) error {
