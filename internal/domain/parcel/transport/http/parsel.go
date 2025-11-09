@@ -132,10 +132,10 @@ func (p *parcelHandler) getParcels(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, struct {
 		ginutil.Response
 		Links   hypermedia.Links        `json:"links"`
-		Parcels []entity.CustomerParcel `json:"tickets"`
+		Parcels []entity.CustomerParcel `json:"parcels"`
 	}{
 		ginutil.Response{
-			"The adresses have successfuly beeen found.",
+			"The parcels have successfuly beeen found.",
 			hypermedia.Links{},
 		},
 		links,

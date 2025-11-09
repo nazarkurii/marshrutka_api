@@ -95,6 +95,10 @@ INSERT INTO countries (id, name) VALUES
 					LargeLuggagePrice:   6000,
 					MinimalParcelPrice:  7000,
 					ParcelPricePerTenCm: 1,
+					LuggageVolumeLeft:   uint(buses[busIndex].LuggageVolume),
+					MaxLength:           int(buses[busIndex].MaxLength),
+					MaxHeight:           int(buses[busIndex].MaxHeight),
+					MaxWidth:            int(buses[busIndex].MaxWidth),
 				},
 				ReturnConnection: entity.Connection{
 					ID:                   returnConnectionID,
@@ -114,6 +118,7 @@ INSERT INTO countries (id, name) VALUES
 					BackpackPrice:     2000,
 					SmallLuggagePrice: 3000,
 					LargeLuggagePrice: 6000,
+					LuggageVolumeLeft: uint(buses[busIndex].LuggageVolume),
 				},
 				Updates: []entity.TripUpdate{{
 					TripID: tripiID,

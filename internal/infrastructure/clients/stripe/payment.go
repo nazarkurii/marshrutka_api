@@ -11,11 +11,11 @@ func InitStripe() {
 	stripe.Key = config.StripSekretKey()
 }
 
-func CreateStripeCheckoutSession(amount int64, token string) (string, string, error) {
+func CreateStripeCheckoutSession(amount int64, base, token string) (string, string, error) {
 	params := &stripe.CheckoutSessionParams{
 		Mode:       stripe.String("payment"),
-		SuccessURL: stripe.String(config.APIURL() + "/connection/purchase-ticket/succeded/{CHECKOUT_SESSION_ID}/" + token),
-		CancelURL:  stripe.String(config.APIURL() + "/connection/purchase-ticket/failed/{CHECKOUT_SESSION_ID}/" + token),
+		SuccessURL: stripe.String(config.APIURL() + base + "/succeded/{CHECKOUT_SESSION_ID}/" + token),
+		CancelURL:  stripe.String(config.APIURL() + base + "/failed/{CHECKOUT_SESSION_ID}/" + token),
 
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{

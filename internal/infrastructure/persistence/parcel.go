@@ -77,7 +77,7 @@ func (pds *parselMysql) GetConnectionsByMonth(ctx context.Context, fromCountry, 
 func (ds *parselMysql) CreateParcelStops(ctx context.Context, paymentSessionID string) error {
 	var parcel entity.Parcel
 	err := dbutil.PossibleRawsAffectedError(ds.db.WithContext(ctx).
-		Where("id IN  (SELECT ticket_id FROM ticket_payments WHERE session_id = ?)", paymentSessionID).
+		Where("id IN  (SELECT parcel_id FROM parcel_payments WHERE session_id = ?)", paymentSessionID).
 		Find(&parcel), "non-existing-session ")
 	if err != nil {
 		return err

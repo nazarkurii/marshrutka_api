@@ -16,9 +16,9 @@ func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
 
 	customerHandler := newHandler(service.NewParcelService(repo.NewParcelRepo(db), client))
 
-	s.GET("/connection/available-parsel-dates/:from/:to/:year/:month", customerHandler.findConnections)
-	customerRouter.POST("/connection/:id/purchase-parsel", customerHandler.purchase)
-	customerRouter.GET("/parsels", customerHandler.getParcels)
-	s.GET("/connection/purchase-parsel/failed/:id/:token", customerHandler.purchaseFailed)
-	s.GET("/connection/purchase-parsel/succeded/:id/:token", customerHandler.purchaseSucceded)
+	s.GET("/connection/available-parcel-dates/:from/:to/:year/:month", customerHandler.findConnections)
+	customerRouter.POST("/connection/:id/purchase-parcel", customerHandler.purchase)
+	customerRouter.GET("/parcels", customerHandler.getParcels)
+	s.GET("/connection/purchase-parcel/failed/:id/:token", customerHandler.purchaseFailed)
+	s.GET("/connection/purchase-parcel/succeded/:id/:token", customerHandler.purchaseSucceded)
 }

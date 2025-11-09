@@ -34,10 +34,12 @@ type Parcel struct {
 	CompletedAt         sql.NullTime   `                                    json:"completedAt"`
 	Payment             ParcelPayment  `gorm:"foreignKey:ParcelID"    `
 	DeletedAt           gorm.DeletedAt `                                    json:"deletedAt"`
-	LuggageVolume       uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
+	LuggageVolume       uint           `gorm:"type:INT UNSIGNED;not null"`
 	Width               int            `gorm:"type:SMALLINT UNSIGNED;not null"`
 	Height              int            `gorm:"type:SMALLINT UNSIGNED;not null"`
 	Length              int            `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Weight              int            `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Type                ParcelType     `gorm:"type:enum('Documents','Package'); not null" json:"type"`
 	QRCode              []byte         `gorm:"type:blob;not null" json:"qrCode"`
 }
 
@@ -58,6 +60,13 @@ func MigratePackage(db *gorm.DB) error {
 
 }
 
+type ParcelType string
+
+const (
+	PackageParcelType   ParcelType = "Package"
+	DocumentsParcelType ParcelType = "Documents"
+)
+
 type FindParcelConnectionsRequest struct {
 	From  string
 	To    string
@@ -66,8 +75,8 @@ type FindParcelConnectionsRequest struct {
 }
 
 type CustomerParcel struct {
-	Parcel
-	Connection CustomerConnection
+	Parcel     Parcel             `json:"parcel"`
+	Connection CustomerConnection `json:"connection"`
 }
 
 type FindParcelConnectionsRequestParsed struct {
@@ -130,10 +139,11 @@ type PurchaseParcelRequest struct {
 	SenderPhoneNumber   string     `json:"senderPhoneNumber"`
 	DropOffAdress       NewAddress `json:"dropOffAdress"`
 	PickUpAdress        NewAddress `json:"pickUpAdress"`
-	ConnectionID        string     `json:"connectionID"`
 	Width               int        `json:"width"`
 	Length              int        `json:"length"`
 	Height              int        `json:"height"`
+	Weight              int        `json:"weight"`
+	Type                string     `json:"type"`
 }
 type ContactInfo struct {
 	FirstName   string
@@ -151,9 +161,11 @@ type PurchaseParcelRequestParsed struct {
 	Width         int
 	Length        int
 	Height        int
+	Weight        int
+	Type          ParcelType
 }
 
-func (ppr PurchaseParcelRequest) Parse() (PurchaseParcelRequestParsed, rfc7807.InvalidParams) {
+func (ppr PurchaseParcelRequest) Parse(connectionIdStr string) (PurchaseParcelRequestParsed, rfc7807.InvalidParams) {
 	var params rfc7807.InvalidParams
 
 	if len(ppr.RecieverFirstName) < 1 {
@@ -190,23 +202,22 @@ func (ppr PurchaseParcelRequest) Parse() (PurchaseParcelRequestParsed, rfc7807.I
 		params.SetInvalidParam("senderPhoneNumber", err.Error())
 	}
 
-	connectionID, err := uuid.Parse(ppr.ConnectionID)
+	connectionID, err := uuid.Parse(connectionIdStr)
 	if err != nil {
 		params.SetInvalidParam("connectionID", err.Error())
 	}
 
-	if params != nil {
-		return PurchaseParcelRequestParsed{}, params
+	if ppr.Weight > 50000 || ppr.Weight < 1000 {
+		params.SetInvalidParam("weight", "Has to be less than or equal to 50.")
 	}
 
-	if ppr.Width < 20 {
-		params.SetInvalidParam("width", "Has to be at least 20.")
+	parcelType, ok := defineParcelType(ppr.Type)
+	if !ok {
+		params.SetInvalidParam("type", "Invalid parcell type.")
 	}
-	if ppr.Height < 20 {
-		params.SetInvalidParam("height", "Has to be at least 20.")
-	}
-	if ppr.Length < 20 {
-		params.SetInvalidParam("length", "Has to be at least 20.")
+
+	if params != nil {
+		return PurchaseParcelRequestParsed{}, params
 	}
 
 	return PurchaseParcelRequestParsed{
@@ -230,5 +241,18 @@ func (ppr PurchaseParcelRequest) Parse() (PurchaseParcelRequestParsed, rfc7807.I
 		Width:         ppr.Width,
 		Length:        ppr.Length,
 		Height:        ppr.Height,
+		Weight:        ppr.Weight,
+		Type:          parcelType,
 	}, nil
+}
+
+func defineParcelType(parcelType string) (ParcelType, bool) {
+	switch parcelType {
+	case "package":
+		return PackageParcelType, true
+	case "documents":
+		return DocumentsParcelType, true
+	default:
+		return ParcelType(""), false
+	}
 }

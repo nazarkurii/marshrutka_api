@@ -220,7 +220,7 @@ func (s *serviceImpl) PurchaseSucceded(ctx context.Context, sessionID, token str
 }
 
 func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connectionID string, newParcel entity.PurchaseParcelRequest) (string, error) {
-	req, params := newParcel.Parse()
+	req, params := newParcel.Parse(connectionID)
 	if params != nil {
 		return "", rfc7807.BadRequest("invalid-request", "Invalid Request Error", "The request is not valid.", params...)
 	}
@@ -231,7 +231,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 	}
 
 	if connection.LuggageVolumeLeft < uint(req.Height*req.Length*req.Width) {
-		return "", rfc7807.BadRequest("too-big-lugage-volume", "Too big Luggage Volume Error", "Provided luggage params makes volume that exceeds the remainig.")
+		return "", rfc7807.New(http.StatusConflict, "too-big-lugage-volume", "Too big Luggage Volume Error", "Provided luggage params makes volume that exceeds the remainig.")
 	}
 
 	pickUpAdress := req.PickUpAdress.ToAddress(connection.DepartureCountryID)
@@ -257,7 +257,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		return "", err
 	}
 
-	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.MinimalParcelPrice+(req.Height-20)*(req.Length-20)*(req.Width-20)*(connection.ParcelPricePerTenCm/10)), token)
+	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.MinimalParcelPrice+(req.Height-20)*(req.Length-20)*(req.Width-20)*(connection.ParcelPricePerTenCm/10)), "/connection/purchase-parcel", token)
 	if err != nil {
 		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
 	}
@@ -297,6 +297,8 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		Height:        req.Height,
 		Length:        req.Length,
 		QRCode:        qrCode,
+		Weight:        req.Weight,
+		Type:          req.Type,
 	}
 
 	err = s.repo.Create(ctx, &parcel)

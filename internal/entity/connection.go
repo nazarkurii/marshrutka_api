@@ -15,7 +15,7 @@ type Connection struct {
 	ID   uuid.UUID `gorm:"type:binary(16);primaryKey" json:"-"`
 	Line int       `gorm:"type:SMALLINT;not null" json:"line"`
 
-	Price int `gorm:"type:MEDIUMINT;not null" json:"price"`
+	Price int `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"price"`
 
 	DepartureCountryID uuid.UUID `gorm:"type:binary(16);not null" json:"-"`
 	DepartureCountry   Country   `gorm:"foreignKey:DepartureCountryID;references:ID" json:"departureCountry"`
@@ -38,11 +38,14 @@ type Connection struct {
 	Type connectionType `gorm:"type:enum('Comertial','Special Asignment','Break Down Return', 'Break Down Replacement'); not null" json:"type"`
 
 	SellBefore          time.Time `gorm:"not null" json:"sellBefore"`
-	BackpackPrice       int       `gorm:"type:MEDIUMINT;not null" json:"backpackPrice"`
-	SmallLuggagePrice   int       `gorm:"type:MEDIUMINT;not null" json:"smallLuggagePrice"`
-	LargeLuggagePrice   int       `gorm:"type:MEDIUMINT;not null" json:"largeLuggagePrice"`
-	MinimalParcelPrice  int       `gorm:"type:MEDIUMINT;not null" json:"minimalParcelPrice"`
-	ParcelPricePerTenCm int       `gorm:"type:MEDIUMINT;not null" json:"parcelPricePerTenCm"`
+	BackpackPrice       int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"backpackPrice"`
+	SmallLuggagePrice   int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"smallLuggagePrice"`
+	LargeLuggagePrice   int       `gorm:"type:MEDIUMINT UNSIGNED; not null" json:"largeLuggagePrice"`
+	MinimalParcelPrice  int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"minimalParcelPrice"`
+	ParcelPricePerTenCm int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"parcelPricePerTenCm"`
+	MaxWidth            int       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxHeight           int       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxLength           int       `gorm:"type:SMALLINT UNSIGNED;not null"`
 	LuggageVolumeLeft   uint      `gorm:"-"`
 }
 

@@ -27,10 +27,10 @@ type Bus struct {
 	CreatedAt          time.Time      `gorm:"not null"                                   `
 	UpdatedAt          time.Time      `gorm:"not null"                                   `
 	DeletedAt          gorm.DeletedAt `gorm:"index"                                      `
-	LuggageVolume      luggage        `gorm:"type:MEDIUMINT UNSIGNED;not null"`
-	MaxWidth           uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
-	MaxHeight          uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
-	MaxLength          uint           `gorm:"type:MEDIUMINT UNSIGNED;not null"`
+	LuggageVolume      luggage        `gorm:"type:INT UNSIGNED;not null"`
+	MaxWidth           uint           `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxHeight          uint           `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxLength          uint           `gorm:"type:INT UNSIGNED;not null"`
 }
 
 //
@@ -547,7 +547,7 @@ func TestBuses() []Bus {
 			Structure:          []Row{row1, row2, row3, row4, row5},
 			CreatedAt:          now,
 			UpdatedAt:          now,
-			LuggageVolume:      12000000,
+			LuggageVolume:      200 * 250 * 350,
 			MaxWidth:           200,
 			MaxHeight:          250,
 			MaxLength:          350,

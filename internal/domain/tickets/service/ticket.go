@@ -121,7 +121,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, newTicket 
 		return "", err
 	}
 
-	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.Price+newTicket.LuggagePrice(connection.BackpackPrice, connection.SmallLuggagePrice, connection.LargeLuggagePrice))*int64(len(newTicket.SeatIDs)), token)
+	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.Price+newTicket.LuggagePrice(connection.BackpackPrice, connection.SmallLuggagePrice, connection.LargeLuggagePrice))*int64(len(newTicket.SeatIDs)), "/connection/purchase-ticket", token)
 	if err != nil {
 		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
 	}
