@@ -1,4 +1,4 @@
-package stripe
+package payment
 
 import (
 	"maryan_api/config"
@@ -7,11 +7,9 @@ import (
 	"github.com/stripe/stripe-go/v76/checkout/session"
 )
 
-func InitStripe() {
-	stripe.Key = config.StripSekretKey()
-}
+type stripePayment paymentImpl
 
-func CreateStripeCheckoutSession(amount int64, base, token string) (string, string, error) {
+func (sp *stripePayment) CreateCheckoutSession(amount int64, base, token string) (string, string, error) {
 	params := &stripe.CheckoutSessionParams{
 		Mode:       stripe.String("payment"),
 		SuccessURL: stripe.String(config.APIURL() + base + "/succeded/{CHECKOUT_SESSION_ID}/" + token),

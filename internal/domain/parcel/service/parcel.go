@@ -257,7 +257,8 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		return "", err
 	}
 
-	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.MinimalParcelPrice+(req.Height-20)*(req.Length-20)*(req.Width-20)*(connection.ParcelPricePerTenCm/10)), "/connection/purchase-parcel", token)
+	parcelCost := 0
+	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(parcelCost), "/connection/purchase-parcel", token)
 	if err != nil {
 		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
 	}
@@ -288,7 +289,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		DropOffAdress:     dropOffAdress,
 		Payment: entity.ParcelPayment{
 			ParcelID:  parcelID,
-			Price:     connection.MinimalParcelPrice + (req.Height-20)*(req.Length-20)*(req.Width-20)*(connection.ParcelPricePerTenCm/10),
+			Price:     parcelCost,
 			Method:    entity.PaymentMethodCard,
 			SessionID: sessionID,
 		},

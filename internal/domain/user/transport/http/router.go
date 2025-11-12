@@ -3,6 +3,7 @@ package http
 import (
 	"maryan_api/internal/domain/user/repo"
 	"maryan_api/internal/domain/user/service"
+	"maryan_api/internal/infrastructure/clients/payment"
 	"maryan_api/pkg/auth"
 	ginutil "maryan_api/pkg/ginutils"
 	"maryan_api/pkg/hypermedia"
@@ -24,7 +25,7 @@ type Driver struct {
 	userhandler userHandler
 }
 
-func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
+func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client, payment payment.Payment) {
 
 	//CUSTOMER ROUTES
 	customer := Customer{newcustomerHandler(service.NewCustomerServiceImpl(repo.NewCustomerRepo(db), client))}

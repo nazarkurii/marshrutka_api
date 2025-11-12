@@ -26,11 +26,6 @@ type Address struct {
 	DeletedAt       gorm.DeletedAt `json:"-"`
 }
 
-type Country struct {
-	ID   uuid.UUID `gorm:"type:binary(16);primaryKey"                       `
-	Name string    `gorm:"type:varchar(50);not null; UNIQUE"`
-}
-
 type NewAddress struct {
 	City            string `json:"city"`
 	Street          string `json:"street"`

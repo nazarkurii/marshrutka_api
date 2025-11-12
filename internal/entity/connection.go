@@ -17,11 +17,11 @@ type Connection struct {
 
 	Price int `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"price"`
 
-	DepartureCountryID uuid.UUID `gorm:"type:binary(16);not null" json:"-"`
-	DepartureCountry   Country   `gorm:"foreignKey:DepartureCountryID;references:ID" json:"departureCountry"`
+	DepartureCountryID uuid.UUID      `gorm:"type:binary(16);not null" json:"-"`
+	DepartureCountry   config.Country `gorm:"foreignKey:DepartureCountryID;references:ID" json:"departureCountry"`
 
-	DestinationCountryID uuid.UUID `gorm:"type:binary(16);not null" json:"-"`
-	DestinationCountry   Country   `gorm:"foreignKey:DestinationCountryID;references:ID" json:"destinationCountry"`
+	DestinationCountryID uuid.UUID      `gorm:"type:binary(16);not null" json:"-"`
+	DestinationCountry   config.Country `gorm:"foreignKey:DestinationCountryID;references:ID" json:"destinationCountry"`
 
 	DepartureTime     time.Time `gorm:"not null" json:"departureTime"`
 	ArrivalTime       time.Time `gorm:"not null" json:"arrivalTime"`
@@ -37,16 +37,11 @@ type Connection struct {
 
 	Type connectionType `gorm:"type:enum('Comertial','Special Asignment','Break Down Return', 'Break Down Replacement'); not null" json:"type"`
 
-	SellBefore          time.Time `gorm:"not null" json:"sellBefore"`
-	BackpackPrice       int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"backpackPrice"`
-	SmallLuggagePrice   int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"smallLuggagePrice"`
-	LargeLuggagePrice   int       `gorm:"type:MEDIUMINT UNSIGNED; not null" json:"largeLuggagePrice"`
-	MinimalParcelPrice  int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"minimalParcelPrice"`
-	ParcelPricePerTenCm int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"parcelPricePerTenCm"`
-	MaxWidth            int       `gorm:"type:SMALLINT UNSIGNED;not null"`
-	MaxHeight           int       `gorm:"type:SMALLINT UNSIGNED;not null"`
-	MaxLength           int       `gorm:"type:SMALLINT UNSIGNED;not null"`
-	LuggageVolumeLeft   uint      `gorm:"-"`
+	SellBefore        time.Time `gorm:"not null" json:"sellBefore"`
+	MaxWidth          int       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxHeight         int       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxLength         int       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	LuggageVolumeLeft uint      `gorm:"-"`
 }
 
 func (c *Connection) AfterFind(tx *gorm.DB) (err error) {
@@ -192,8 +187,8 @@ func (c *Connection) Simplify() ConnectionSimplified {
 		Price:              c.Price,
 		DepartureCountry:   c.DepartureCountry.Name,
 		DestinationCountry: c.DestinationCountry.Name,
-		DepartureTime:      config.MustParseToLocalByUUID(c.DepartureTime, c.DepartureCountryID),
-		ArrivalTime:        config.MustParseToLocalByUUID(c.ArrivalTime, c.DestinationCountryID),
+		DepartureTime:      config.MMustParseTimeToLocalByCountryUUID(c.DepartureTime, c.DepartureCountryID),
+		ArrivalTime:        config.MMustParseTimeToLocalByCountryUUID(c.ArrivalTime, c.DestinationCountryID),
 		Line:               c.Line,
 		EstimatedDuration:  c.EstimatedDuration,
 		SellBefore:         c.SellBefore,
@@ -210,7 +205,7 @@ type CustomerConnection struct {
 	SmallLuggagePrice       int         `json:"smallLuggagePrice"`
 	LargeLuggagePrice       int         `json:"largeLuggagePrice"`
 	MinimalParcelPrice      int         `json:"minimalParcelPrice"`
-	ParcelPricePerTenCm     int         `json:"parcelPricePerTenCm"`
+	ParcelPricePerCm        int         `json:"parcelPricePerTenCm"`
 }
 
 func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID) CustomerConnection {
@@ -220,11 +215,6 @@ func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID) CustomerConnection {
 		Bus:                     c.Bus.ToCustomerBus(takenSeatsIDs),
 		Stops:                   c.Stops,
 		LuggageVolumeLeft:       c.LuggageVolumeLeft,
-		BackpackPrice:           c.BackpackPrice,
-		SmallLuggagePrice:       c.SmallLuggagePrice,
-		LargeLuggagePrice:       c.LargeLuggagePrice,
-		MinimalParcelPrice:      c.MinimalParcelPrice,
-		ParcelPricePerTenCm:     c.ParcelPricePerTenCm,
 	}
 }
 
@@ -372,15 +362,12 @@ type ConnectionsRange struct {
 }
 
 func (c *Connection) ToParcelConnection(usable bool, dayNumber, dayMonth int, isCurrentMonth bool) ConnectionParcel {
-
 	return ConnectionParcel{
 		ConnectionSimplified: c.Simplify(),
 		LuggageVolumeLeft:    c.LuggageVolumeLeft,
 		MaxWidth:             c.Bus.MaxWidth,
 		MaxHeight:            c.Bus.MaxHeight,
 		MaxLength:            c.Bus.MaxLength,
-		MinimalParcelPrice:   c.MinimalParcelPrice,
-		ParcelPricePerTenCm:  c.ParcelPricePerTenCm,
 		Usable:               usable,
 		DayNumber:            dayNumber,
 		DayMonth:             dayMonth,

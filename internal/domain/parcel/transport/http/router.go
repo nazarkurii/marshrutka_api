@@ -3,6 +3,7 @@ package http
 import (
 	"maryan_api/internal/domain/parcel/repo"
 	"maryan_api/internal/domain/parcel/service"
+	"maryan_api/internal/infrastructure/clients/payment"
 	"maryan_api/pkg/auth"
 	ginutil "maryan_api/pkg/ginutils"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
+func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client, payment payment.Payment) {
 	customerRouter := ginutil.CreateAuthRouter("/customer", auth.Customer.SecretKey(), s)
 
 	customerHandler := newHandler(service.NewParcelService(repo.NewParcelRepo(db), client))

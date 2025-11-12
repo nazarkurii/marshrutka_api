@@ -52,10 +52,18 @@ type ParcelPayment struct {
 	Succeeded bool          `gorm:"not null"                                                          json:"succeeded"`
 }
 
+type ParcelCostParam struct {
+	Height int  `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Length int  `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Weight int  `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Cost   uint `grom:"type:INT UNSIGNED;not null"`
+}
+
 func MigratePackage(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&Parcel{},
 		&ParcelPayment{},
+		&ParcelCostParam{},
 	)
 
 }
@@ -165,6 +173,9 @@ type PurchaseParcelRequestParsed struct {
 	Type          ParcelType
 }
 
+func (pprp PurchaseParcelRequestParsed) CalculateCost(minPrice, pricePerCm int) int {
+	return minPrice + pprp.Height*pprp.Length*pprp.Width - pprp.Height
+}
 func (ppr PurchaseParcelRequest) Parse(connectionIdStr string) (PurchaseParcelRequestParsed, rfc7807.InvalidParams) {
 	var params rfc7807.InvalidParams
 

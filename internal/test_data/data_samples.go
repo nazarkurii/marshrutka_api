@@ -25,22 +25,27 @@ import (
 // DEALLOCATE PREPARE stmt;
 // SET foreign_key_checks = 1;
 
+// nazar@debian:~$ mysql -h marshrutka-marshrutka.i.aivencloud.com   -u avnadmin   -p -D defaultdb  -P 27657   --ssl-ca=/home/nazar/nazar/marshrutka/api/certificates/ca.pem
+
 func CreateTestData(db *gorm.DB) {
-	db.Exec(`
-INSERT INTO countries (id, name) VALUES
-(UUID_TO_BIN(UUID()), 'Poland'),
-(UUID_TO_BIN(UUID()), 'Germany'),
-(UUID_TO_BIN(UUID()), 'Czechia'),
-(UUID_TO_BIN(UUID()), 'Estonia'),
-(UUID_TO_BIN(UUID()), 'Latvia'),
-(UUID_TO_BIN(UUID()), 'Lithuania'),
-(UUID_TO_BIN(UUID()), 'Slovakia'),
-(UUID_TO_BIN(UUID()), 'Hungary'),
-(UUID_TO_BIN(UUID()), 'Ukraine');
-`)
-	config.LoadCountries(db)
+	err := db.Create(config.CountriesConfigTestData()).Error
+	if err != nil {
+		panic(err)
+	}
+	err = db.Create(config.LuggageConfigTestData()).Error
+	if err != nil {
+		panic(err)
+	}
+	err = db.Create(config.ParcelConfigTestData()).Error
+	if err != nil {
+		panic(err)
+	}
+	config.LoadCountriesConfig(db)
+	config.LoadLuggageConfig(db)
+	config.LoadLuggageConfig(db)
+
 	drivers := entity.TestDrivers()
-	err := db.Create(drivers).Error
+	err = db.Create(drivers).Error
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +63,7 @@ INSERT INTO countries (id, name) VALUES
 	}
 
 	var line = 100
-	countries, ukraineID := config.GetCountries()
+	countries, ukraineID := config.GetCountriesConfig()
 	var busIndex int
 	fmt.Println(len(countries))
 	for _, countryID := range countries {
@@ -88,17 +93,12 @@ INSERT INTO countries (id, name) VALUES
 						ConnectionID: outboundConnectionID,
 						Status:       entity.RegisteredConnectionStatus,
 					}},
-					Type:                entity.ComertialConnectionType,
-					SellBefore:          departureTime.Add(-time.Hour * 24).UTC(),
-					BackpackPrice:       2000,
-					SmallLuggagePrice:   3000,
-					LargeLuggagePrice:   6000,
-					MinimalParcelPrice:  7000,
-					ParcelPricePerTenCm: 1,
-					LuggageVolumeLeft:   uint(buses[busIndex].LuggageVolume),
-					MaxLength:           int(buses[busIndex].MaxLength),
-					MaxHeight:           int(buses[busIndex].MaxHeight),
-					MaxWidth:            int(buses[busIndex].MaxWidth),
+					Type:              entity.ComertialConnectionType,
+					SellBefore:        departureTime.Add(-time.Hour * 24).UTC(),
+					LuggageVolumeLeft: uint(buses[busIndex].LuggageVolume),
+					MaxLength:         int(buses[busIndex].MaxLength),
+					MaxHeight:         int(buses[busIndex].MaxHeight),
+					MaxWidth:          int(buses[busIndex].MaxWidth),
 				},
 				ReturnConnection: entity.Connection{
 					ID:                   returnConnectionID,
@@ -115,9 +115,6 @@ INSERT INTO countries (id, name) VALUES
 					}},
 					Type:              entity.ComertialConnectionType,
 					SellBefore:        departureTime.Add(time.Hour * 36).UTC().UTC(),
-					BackpackPrice:     2000,
-					SmallLuggagePrice: 3000,
-					LargeLuggagePrice: 6000,
 					LuggageVolumeLeft: uint(buses[busIndex].LuggageVolume),
 				},
 				Updates: []entity.TripUpdate{{
