@@ -2,7 +2,7 @@ package main
 
 import (
 	"maryan_api/config"
-	"maryan_api/internal/infrastructure/clients/stripe"
+	"maryan_api/internal/infrastructure/clients/payment"
 	dataStore "maryan_api/internal/infrastructure/persistence"
 	"maryan_api/internal/infrastructure/router"
 	"maryan_api/pkg/languages"
@@ -20,9 +20,11 @@ func main() {
 
 	db := dataStore.Init()
 	dataStore.Migrate(db)
-	config.LoadCountries(db)
+	config.LoadCountriesConfig(db)
+	config.LoadLuggageConfig(db)
+	config.LoadLuggageConfig(db)
 
-	stripe.InitStripe()
+	payment := payment.Init()
 	server := gin.Default()
 	server.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
@@ -32,7 +34,7 @@ func main() {
 
 	server.Use(languages.GinMiddlewear)
 	client := http.DefaultClient
-	router.RegisterRoutes(server, db, client)
+	router.RegisterRoutes(server, db, client, payment)
 	server.Static("/imgs", "../../static/images")
 	server.GET("", func(ctx *gin.Context) {
 		ctx.JSON(
