@@ -128,9 +128,10 @@ func (p *passengerHandler) purchaseFailed(ctx *gin.Context) {
 
 	err := p.service.PurchaseFailed(ctx, sessionID, token)
 	if err != nil {
+
 		ctx.Redirect(http.StatusFound, config.FrontendURL()+"/internal-server-error")
 		return
 	}
 
-	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/connection/failed/0/0/0/true")
+	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/connection/failed/failed/failed/failed/true")
 }

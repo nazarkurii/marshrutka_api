@@ -69,7 +69,9 @@ func (pds *parselMysql) GetConnectionsByMonth(ctx context.Context, fromCountry, 
 			}
 		}
 
-		connections[i].LuggageVolumeLeft = uint(connection.Bus.LuggageVolume) - takenLuggageVolume - uint((len(connection.Bus.Seats)-passengersNumber)*(config.BackpackVolume+config.LargeLuggageVolume))
+		luggage := config.GetLoggageConfig()
+
+		connections[i].LuggageVolumeLeft = uint(connection.Bus.LuggageVolume) - takenLuggageVolume - uint((len(connection.Bus.Seats)-passengersNumber)*(luggage.Small.Volume+luggage.Large.Volume))
 	}
 	return connections, nil
 }
@@ -157,13 +159,15 @@ func (ds *parselMysql) PaymentSucceeded(ctx context.Context, paymentSessionID st
 	return dbutil.PossibleRawsAffectedError(ds.db.Table("parcel_payments").Where("session_id = ?", paymentSessionID).Update("succeeded", true))
 }
 
+//cs_test_a1CrwsqWkRwxQ3RGa7YPrNeryQ3zqEEORgWmyFtg8WNX1xPziGQ1BhoQtx
+
 func (ds *parselMysql) RemoveParcelStops(ctx context.Context, paymentSessionID string) error {
 	err := dbutil.PossibleRawsAffectedError(ds.db.Unscoped().Table("stop_updates").Where("stop_id IN (SELECT id FROM stops WHERE parcel_id IN (SELECT parcel_id FROM parcel_payments WHERE session_id = ?))", paymentSessionID).Delete(&entity.Stop{}), "non-existing-data")
 	if err != nil {
 		return err
 	}
 
-	return dbutil.PossibleRawsAffectedError(ds.db.Unscoped().Table("stops").Where("parcel_id IN (SELECT parcel_id FROM ticket_payments WHERE session_id = ?)", paymentSessionID).Delete(&entity.Stop{}), "non-existing-data")
+	return dbutil.PossibleRawsAffectedError(ds.db.Unscoped().Table("stops").Where("parcel_id IN (SELECT parcel_id FROM parcel_payments WHERE session_id = ?)", paymentSessionID).Delete(&entity.Stop{}), "non-existing-data")
 }
 
 func (ds *parselMysql) DeleteParcels(ctx context.Context, paymentSessionID string) error {

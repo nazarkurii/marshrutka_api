@@ -123,3 +123,7 @@ func GoogleSecretKey() string {
 func GooglePlacesApiKey() string {
 	return mustGetEnv("GOOGLE_PLACES_API_KEY")
 }
+
+func RootPath() string {
+	return mustGetEnv("ROOT_PATH")
+}

@@ -35,10 +35,10 @@ type Parcel struct {
 	Payment             ParcelPayment  `gorm:"foreignKey:ParcelID"    `
 	DeletedAt           gorm.DeletedAt `                                    json:"deletedAt"`
 	LuggageVolume       uint           `gorm:"type:INT UNSIGNED;not null"`
-	Width               int            `gorm:"type:SMALLINT UNSIGNED;not null"`
-	Height              int            `gorm:"type:SMALLINT UNSIGNED;not null"`
-	Length              int            `gorm:"type:SMALLINT UNSIGNED;not null"`
-	Weight              int            `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Width               int            `gorm:"type:SMALLINT UNSIGNED;not null"  json:"width"`
+	Height              int            `gorm:"type:SMALLINT UNSIGNED;not null" json:"height"`
+	Length              int            `gorm:"type:SMALLINT UNSIGNED;not null" json:"length"`
+	Weight              int            `gorm:"type:SMALLINT UNSIGNED;not null" json:"weight"`
 	Type                ParcelType     `gorm:"type:enum('Documents','Package'); not null" json:"type"`
 	QRCode              []byte         `gorm:"type:blob;not null" json:"qrCode"`
 }
@@ -68,10 +68,13 @@ const (
 )
 
 type FindParcelConnectionsRequest struct {
-	From  string
-	To    string
-	Year  string
-	Month string
+	From   string
+	To     string
+	Year   string
+	Month  string
+	Length string
+	Height string
+	Width  string
 }
 
 type CustomerParcel struct {
@@ -80,11 +83,13 @@ type CustomerParcel struct {
 }
 
 type FindParcelConnectionsRequestParsed struct {
-	From uuid.UUID
-	To   uuid.UUID
-
-	Year  int
-	Month time.Month
+	From   uuid.UUID
+	To     uuid.UUID
+	Length int
+	Height int
+	Width  int
+	Year   int
+	Month  time.Month
 }
 
 func (fpcr FindParcelConnectionsRequest) Parse() (FindParcelConnectionsRequestParsed, error) {
@@ -118,12 +123,29 @@ func (fpcr FindParcelConnectionsRequest) Parse() (FindParcelConnectionsRequestPa
 		params.SetInvalidParam("month", "Has to be between 1-12.")
 	}
 
-	return FindParcelConnectionsRequestParsed{
-		from,
-		to,
+	height, err := strconv.Atoi(fpcr.Height)
+	if err != nil {
+		params.SetInvalidParam("height", err.Error())
+	}
+	width, err := strconv.Atoi(fpcr.Width)
+	if err != nil {
+		params.SetInvalidParam("width", err.Error())
+	}
 
-		year,
-		time.Month(monthNumber),
+	length, err := strconv.Atoi(fpcr.Length)
+	if err != nil {
+		params.SetInvalidParam("length", err.Error())
+	}
+
+	return FindParcelConnectionsRequestParsed{
+		From:   from,
+		To:     to,
+		Length: length,
+
+		Height: height,
+		Width:  width,
+		Year:   year,
+		Month:  time.Month(monthNumber),
 	}, nil
 
 }

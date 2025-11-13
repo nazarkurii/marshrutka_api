@@ -37,16 +37,15 @@ type Connection struct {
 
 	Type connectionType `gorm:"type:enum('Comertial','Special Asignment','Break Down Return', 'Break Down Replacement'); not null" json:"type"`
 
-	SellBefore          time.Time `gorm:"not null" json:"sellBefore"`
-	BackpackPrice       int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"backpackPrice"`
-	SmallLuggagePrice   int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"smallLuggagePrice"`
-	LargeLuggagePrice   int       `gorm:"type:MEDIUMINT UNSIGNED; not null" json:"largeLuggagePrice"`
-	MinimalParcelPrice  int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"minimalParcelPrice"`
-	ParcelPricePerTenCm int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"parcelPricePerTenCm"`
-	MaxWidth            int       `gorm:"type:SMALLINT UNSIGNED;not null"`
-	MaxHeight           int       `gorm:"type:SMALLINT UNSIGNED;not null"`
-	MaxLength           int       `gorm:"type:SMALLINT UNSIGNED;not null"`
-	LuggageVolumeLeft   uint      `gorm:"-"`
+	SellBefore        time.Time `gorm:"not null" json:"sellBefore"`
+	BackpackPrice     int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"backpackPrice"`
+	SmallLuggagePrice int       `gorm:"type:MEDIUMINT UNSIGNED;not null" json:"smallLuggagePrice"`
+	LargeLuggagePrice int       `gorm:"type:MEDIUMINT UNSIGNED; not null" json:"largeLuggagePrice"`
+
+	MaxWidth          int  `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxHeight         int  `gorm:"type:SMALLINT UNSIGNED;not null"`
+	MaxLength         int  `gorm:"type:SMALLINT UNSIGNED;not null"`
+	LuggageVolumeLeft uint `gorm:"-"`
 }
 
 func (c *Connection) AfterFind(tx *gorm.DB) (err error) {
@@ -209,22 +208,23 @@ type CustomerConnection struct {
 	BackpackPrice           int         `json:"backpackPrice"`
 	SmallLuggagePrice       int         `json:"smallLuggagePrice"`
 	LargeLuggagePrice       int         `json:"largeLuggagePrice"`
-	MinimalParcelPrice      int         `json:"minimalParcelPrice"`
-	ParcelPricePerTenCm     int         `json:"parcelPricePerTenCm"`
 }
 
-func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID) CustomerConnection {
+type ParcelConnection struct {
+	ConnectionSimplified
+	Price int `json:"price"`
+}
+
+func (c *Connection) ToCustomer(takenSeatsIDs []uuid.UUID, smallLuggagePrice, mediumLuggagePrice, largeLuggagePrice int) CustomerConnection {
 	return CustomerConnection{
 		ConnectionSimplified:    c.Simplify(),
 		GoogleMapsConnectionURL: c.GoogleMapsURL,
 		Bus:                     c.Bus.ToCustomerBus(takenSeatsIDs),
 		Stops:                   c.Stops,
 		LuggageVolumeLeft:       c.LuggageVolumeLeft,
-		BackpackPrice:           c.BackpackPrice,
-		SmallLuggagePrice:       c.SmallLuggagePrice,
-		LargeLuggagePrice:       c.LargeLuggagePrice,
-		MinimalParcelPrice:      c.MinimalParcelPrice,
-		ParcelPricePerTenCm:     c.ParcelPricePerTenCm,
+		BackpackPrice:           smallLuggagePrice,
+		SmallLuggagePrice:       mediumLuggagePrice,
+		LargeLuggagePrice:       largeLuggagePrice,
 	}
 }
 
@@ -352,16 +352,15 @@ type ConnectionSimplified struct {
 
 type ConnectionParcel struct {
 	ConnectionSimplified
-	LuggageVolumeLeft   uint `json:"luggageVolumeLeft"`
-	MaxWidth            uint `json:"maxWidth"`
-	MaxHeight           uint `json:"maxHeight"`
-	MaxLength           uint `json:"maxLength"`
-	MinimalParcelPrice  int  `json:"minimalParcelPrice"`
-	ParcelPricePerTenCm int  `json:"parcelPricePerTenCm"`
-	Usable              bool `json:"usable"`
-	DayNumber           int  `json:"dayNumber"`
-	DayMonth            int  `json:"dayMonth"`
-	IsCurrentMonth      bool `json:"isCurrentMonth"`
+	Price             int  `json:"price"`
+	LuggageVolumeLeft uint `json:"luggageVolumeLeft"`
+	MaxWidth          uint `json:"maxWidth"`
+	MaxHeight         uint `json:"maxHeight"`
+	MaxLength         uint `json:"maxLength"`
+	Usable            bool `json:"usable"`
+	DayNumber         int  `json:"dayNumber"`
+	DayMonth          int  `json:"dayMonth"`
+	IsCurrentMonth    bool `json:"isCurrentMonth"`
 }
 type ConnectionsRange struct {
 	Date       time.Time `gorm:"column:date" json:"date"`
@@ -371,16 +370,15 @@ type ConnectionsRange struct {
 	MinPrice   int       `gorm:"column:minPrice" json:"minPrice"`
 }
 
-func (c *Connection) ToParcelConnection(usable bool, dayNumber, dayMonth int, isCurrentMonth bool) ConnectionParcel {
+func (c *Connection) ToParcelConnection(usable bool, dayNumber, dayMonth int, isCurrentMonth bool, price int) ConnectionParcel {
 
 	return ConnectionParcel{
+		Price:                price,
 		ConnectionSimplified: c.Simplify(),
 		LuggageVolumeLeft:    c.LuggageVolumeLeft,
 		MaxWidth:             c.Bus.MaxWidth,
 		MaxHeight:            c.Bus.MaxHeight,
 		MaxLength:            c.Bus.MaxLength,
-		MinimalParcelPrice:   c.MinimalParcelPrice,
-		ParcelPricePerTenCm:  c.ParcelPricePerTenCm,
 		Usable:               usable,
 		DayNumber:            dayNumber,
 		DayMonth:             dayMonth,

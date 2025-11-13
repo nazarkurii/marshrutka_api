@@ -78,7 +78,7 @@ func (s *serviceImpl) PurchaseFailed(ctx context.Context, sessionID, token strin
 	if err != nil {
 		return err
 	}
-	return s.repo.DeleteTickets(ctx, sessionID)
+	return nil
 }
 
 func (s *serviceImpl) PurchaseSucceded(ctx context.Context, sessionID, token string) error {
@@ -121,7 +121,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, newTicket 
 		return "", err
 	}
 
-	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(connection.Price+newTicket.LuggagePrice(connection.BackpackPrice, connection.SmallLuggagePrice, connection.LargeLuggagePrice))*int64(len(newTicket.SeatIDs)), "/connection/purchase-ticket", token)
+	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession((int64(connection.Price)*int64(len(newTicket.SeatIDs)))+int64(newTicket.LuggagePrice()), "/connection/purchase-ticket", token)
 	if err != nil {
 		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
 	}
@@ -145,7 +145,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, newTicket 
 		DropOffAdress:   *dropOffAdress,
 		Payment: entity.TicketPayment{
 			TicketID:  ticketID,
-			Price:     connection.Price + newTicket.LuggagePrice(connection.BackpackPrice, connection.SmallLuggagePrice, connection.LargeLuggagePrice),
+			Price:     connection.Price + newTicket.LuggagePrice(),
 			Method:    entity.PaymentMethodCard,
 			SessionID: sessionID,
 			Succeeded: false,

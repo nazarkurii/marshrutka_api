@@ -3,10 +3,10 @@ package entity
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
 	"slices"
 
+	"maryan_api/config"
 	rfc7807 "maryan_api/pkg/problem"
 	"time"
 
@@ -19,17 +19,17 @@ type Ticket struct {
 	ID              uuid.UUID      `gorm:"type:binary(16);primaryKey"         json:"id"`
 	UserID          uuid.UUID      `gorm:"type:binary(16);not null"           json:"userId"`
 	ConnectionID    uuid.UUID      `gorm:"type:binary(16);not null"           json:"connectionID"`
-	Seats           []TicketSeat   `json:"seats"`
+	Seats           []TicketSeat   `gorm:"constraint:OnDelete:CASCADE" json:"seats"`
 	PhoneNumber     string         `gorm:"type:varchar(15);not null"                                                  json:"phoneNumber"`
 	Email           string         `gorm:"type:varchar(255);not null"                          json:"email"`
-	Passengers      []Passenger    `gorm:"foreignKey:TicketID"       json:"passengers"`
+	Passengers      []Passenger    `gorm:"foreignKey:TicketID;onstraint:OnDelete:CASCADE"      json:"passengers"`
 	PickUpAdressID  uuid.UUID      `gorm:"type:binary(16);not null"           json:"-"`
-	PickUpAdress    Address        `gorm:"foreignKey:PickUpAdressID"    json:"pickUpAddress"`
+	PickUpAdress    Address        `gorm:"foreignKey:PickUpAdressID;onstraint:OnDelete:CASCADE"    json:"pickUpAddress"`
 	DropOffAdressID uuid.UUID      `gorm:"type:binary(16);not null"           json:"-"`
-	DropOffAdress   Address        `gorm:"foreignKey:DropOffAdressID"   json:"dropOffAddress"`
+	DropOffAdress   Address        `gorm:"foreignKey:DropOffAdressID;onstraint:OnDelete:CASCADE"   json:"dropOffAddress"`
 	CreatedAt       time.Time      `gorm:"not null"                     json:"createdAt"`
 	CompletedAt     sql.NullTime   `                                    json:"completedAt"`
-	Payment         TicketPayment  `gorm:"foreignKey:TicketID"    `
+	Payment         TicketPayment  `gorm:"foreignKey:TicketID;onstraint:OnDelete:CASCADE"    `
 	DeletedAt       gorm.DeletedAt `                                    json:"deletedAt"`
 	LuggageVolume   luggage        `gorm:"type:MEDIUMINT UNSIGNED;not null"`
 	QRCode          []byte         `gorm:"type:blob;not null" json:"qrCode"`
@@ -44,7 +44,7 @@ const (
 )
 
 type TicketSeat struct {
-	TicketID uuid.UUID `gorm:"type:binary(16);not null"           json:"-"`
+	TicketID uuid.UUID `gorm:"type:binary(16);not null;constraint:OnDelete:CASCADE"          json:"-"`
 	SeatID   uuid.UUID `gorm:"type:binary(16);not null"           json:"-"`
 	Seat     Seat      `gorm:"foreignKey:SeatID"   json:"seat"`
 }
@@ -55,7 +55,7 @@ type CustomerTicket struct {
 }
 
 type TicketPayment struct {
-	TicketID  uuid.UUID     `gorm:"type:binary(16);not null"                                                json:"ticketId"`
+	TicketID  uuid.UUID     `gorm:"type:binary(16);not null;primaryKey;constraint:OnDelete:CASCADE"                                              json:"ticketId"`
 	Price     int           `gorm:"type:MEDIUMINT;not null"                                           json:"price"`
 	Method    paymentMethod `gorm:"type:enum('Apple Pay','Card','Cash','Google Pay');not null"        json:"method"`
 	CreatedAt time.Time     `gorm:"not null"                                                          json:"createdAt"`
@@ -103,22 +103,22 @@ type NewTicketJSON struct {
 	LargeLuggage  int            `json:"largeLuggage"`
 }
 
-func (t NewTicketJSON) LuggagePrice(backPackPrice, smallLuggagePrice, largeLuggagePrice int) int {
+func (t NewTicketJSON) LuggagePrice() int {
 
 	var backPacksTotalPrice, largeLuggageTotalPrice int
 
+	luggage := config.GetLoggageConfig()
 	passengersNumber := len(t.Passengers)
 
 	if t.Backpacks > passengersNumber {
-		backPacksTotalPrice = (t.Backpacks - passengersNumber) * backPackPrice
+		backPacksTotalPrice = (t.Backpacks - passengersNumber) * int(luggage.Small.Price)
 	}
 
 	if t.LargeLuggage > passengersNumber {
-		largeLuggageTotalPrice = (t.LargeLuggage - passengersNumber) * largeLuggagePrice
+		largeLuggageTotalPrice = (t.LargeLuggage - passengersNumber) * int(luggage.Large.Price)
 	}
 
-	fmt.Println(t.Backpacks, t.SmallLuggage, t.LargeLuggage, backPackPrice, smallLuggagePrice, largeLuggagePrice, ".............................", backPacksTotalPrice+largeLuggageTotalPrice+t.SmallLuggage*smallLuggagePrice)
-	return backPacksTotalPrice + largeLuggageTotalPrice + t.SmallLuggage*smallLuggagePrice
+	return backPacksTotalPrice + largeLuggageTotalPrice + t.SmallLuggage*int(luggage.Medium.Price)
 
 }
 

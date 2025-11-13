@@ -29,10 +29,13 @@ func (ch *parcelHandler) findConnections(ctx *gin.Context) {
 	defer cancel()
 
 	req := entity.FindParcelConnectionsRequest{
-		From:  ctx.Param("from"),
-		To:    ctx.Param("to"),
-		Year:  ctx.Param("year"),
-		Month: ctx.Param("month"),
+		From:   ctx.Param("from"),
+		To:     ctx.Param("to"),
+		Year:   ctx.Param("year"),
+		Month:  ctx.Param("month"),
+		Length: ctx.Param("length"),
+		Height: ctx.Param("height"),
+		Width:  ctx.Param("width"),
 	}
 	connections, err := ch.service.FindConnections(
 		ctxWithTimeout,
@@ -163,5 +166,25 @@ func (p *parcelHandler) purchaseFailed(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/parcel/failed/0/0/0/true")
+	ctx.Redirect(http.StatusFound, config.FrontendURL()+"/parcel/failed/failed/failed/failed/failed/failed/true")
+}
+
+func (ch *parcelHandler) GetByID(ctx *gin.Context) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Second*10)
+	defer cancel()
+	connection, err := ch.service.GetConnectionByID(ctxWithTimeout, ctx.Param("id"), ctx.Param("width"), ctx.Param("height"), ctx.Param("length"))
+	if err != nil {
+		ginutil.ServiceErrorAbort(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, struct {
+		Connection entity.CustomerConnection `json:"connection"`
+		ginutil.Response
+	}{
+		connection,
+		ginutil.Response{
+			Message: "The connection has successfuly been found.",
+		},
+	})
 }

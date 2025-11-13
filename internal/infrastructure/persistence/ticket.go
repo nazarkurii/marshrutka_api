@@ -2,7 +2,6 @@ package dataStore
 
 import (
 	"context"
-	"fmt"
 	"maryan_api/internal/entity"
 	"maryan_api/pkg/dbutil"
 
@@ -96,57 +95,17 @@ func (ds *ticketMySQL) RemovePassengerStops(ctx context.Context, paymentSessionI
 
 func (ds *ticketMySQL) DeleteTickets(ctx context.Context, paymentSessionID string) error {
 	return ds.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var ticketIDs []uuid.UUID
+		var session = entity.TicketPayment{
+			SessionID: paymentSessionID,
+		}
 		err := dbutil.PossibleRawsAffectedError(
-			tx.Table("tickets").
-				Select("id").
-				Where("id IN (SELECT ticket_id FROM ticket_payments WHERE session_id = ?)", paymentSessionID).
-				Find(&ticketIDs),
+			tx.Where("session_id = ?", paymentSessionID).First(&session),
 		)
-
-		if err != nil {
-			return err
-		} else if len(ticketIDs) == 0 {
-			return fmt.Errorf("non-existing-session")
-		}
-
-		var passengerIDs []uuid.UUID
-		err = dbutil.PossibleRawsAffectedError(tx.Table("tickets").
-			Select("passenger_id").
-			Where("id IN (?)", ticketIDs).
-			Find(&passengerIDs),
-		)
-
 		if err != nil {
 			return err
 		}
+		return dbutil.PossibleRawsAffectedError(tx.Unscoped().Delete(&entity.Ticket{ID: session.TicketID}))
 
-		var addressIDs []uuid.UUID
-		err = dbutil.PossibleRawsAffectedError(tx.Raw(`
-			SELECT pick_up_adress_id FROM tickets WHERE id IN (?) 
-			UNION 
-			SELECT drop_off_adress_id FROM tickets WHERE id IN (?)
-		`, ticketIDs, ticketIDs).Scan(&addressIDs))
-		if err != nil {
-			return err
-		}
-
-		err = dbutil.PossibleRawsAffectedError(tx.Where("ticket_id IN (?)", ticketIDs).Unscoped().Delete(&entity.TicketPayment{}))
-		if err != nil {
-			return err
-		}
-
-		err = dbutil.PossibleRawsAffectedError(tx.Where("id IN (?)", ticketIDs).Unscoped().Delete(&entity.Ticket{}))
-		if err != nil {
-			return err
-		}
-
-		err = dbutil.PossibleRawsAffectedError(tx.Where("id IN (?)", passengerIDs).Unscoped().Delete(&entity.Passenger{}))
-		if err != nil {
-			return err
-		}
-
-		return dbutil.PossibleRawsAffectedError(tx.Where("id IN (?)", addressIDs).Unscoped().Delete(&entity.Address{}))
 	})
 }
 

@@ -10,7 +10,7 @@ import (
 
 type Passenger struct {
 	ID        uuid.UUID      `gorm:"type:binary(16); primaryKey;"         json:"id"`
-	TicketID  uuid.UUID      `gorm:"type:binary(16);not null;"         json:"ticketId"`
+	TicketID  uuid.UUID      `gorm:"type:binary(16);not null;constraint:OnDelete:CASCADE"         json:"ticketId"`
 	FirstName string         `gorm:"type:varchar(255); not null"    json:"firstName"`
 	LastName  string         `gorm:"type:varchar(255); not null"    json:"lastName"`
 	CreatedAt time.Time      `gorm:"not null"                       json:"-"`
