@@ -92,7 +92,7 @@ func (ds *connectionMySQL) findBaseConnections(
 			Preload(clause.Associations).
 			Where(
 				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) = ? AND destination_country_id = ? AND departure_country_id = ?",
-				config.MustGetLocationFromCountryID(request.From).String(),
+				config.MustGetLocationByCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
@@ -145,7 +145,7 @@ func (ds *connectionMySQL) findLeftRange(
 			).
 			Where(
 				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) < DATE(?) AND destination_country_id = ? AND departure_country_id = ?",
-				config.MustGetLocationFromCountryID(request.From).String(),
+				config.MustGetLocationByCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
@@ -173,7 +173,7 @@ func (ds *connectionMySQL) findRightRange(
 			).
 			Where(
 				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) > ? AND destination_country_id = ? AND departure_country_id = ?",
-				config.MustGetLocationFromCountryID(request.From).String(),
+				config.MustGetLocationByCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,

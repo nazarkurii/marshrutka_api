@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"slices"
 
 	"github.com/d3code/uuid"
@@ -9,125 +8,108 @@ import (
 )
 
 type Parcel struct {
-	ID         uuid.UUID `gorm:"type:binary(16);primaryKey" json:"-"`
-	IsOverSize bool      `gorm:"not null"`
-	Height     int       `gorm:"type:SMALLINT UNSIGNED;not null"  json:"height"`
-	Width      int       `gorm:"type:SMALLINT UNSIGNED;not null"  json:"width"`
-	Length     int       `gorm:"type:SMALLINT UNSIGNED;not null"  json:"length"`
-	Price      uint      `gorm:"type:INT UNSIGNED;not null"  json:"price"`
+	ID             uuid.UUID  `gorm:"type:binary(16);primaryKey"`
+	ParcelConfigID uuid.UUID  `gorm:"type:binary(16);index"`
+	Type           parcelType `gorm:"type:enum('Oversized','Ussual','Documents,)"`
+	Height         uint       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Width          uint       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Length         uint       `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Price          uint       `gorm:"type:INT UNSIGNED;not null"`
+	SizeParams     []uint     `gorm:"-"`
 }
 
 type parcelType string
 
 const (
-	UndefinedSizeParcelType parcelType = "Undefined Size"
+	UndefinedSizeParcelType parcelType = "Oversized"
 	UssualParcelType        parcelType = "Ussual"
+	Documents               parcelType = "Documents"
 )
 
-var parcelsConfig []Parcel
-var undefinedParcleSizePrice uint
+type ParcelsConfig struct {
+	ID            uuid.UUID `gorm:"type:binary(16);primaryKey"`
+	CountryID     uuid.UUID `gorm:"type:binary(16);uniqueIndex"`
+	ParcelTypes   []Parcel  `gorm:"foreignKey:ParcelConfigID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
+	OverSizePrice uint      `gorm:"type:INT UNSIGNED;not null"`
+}
 
-func LoadParcelsConfig(db *gorm.DB) {
-	var allParcels []Parcel
+func (p *Parcel) AfterFind(tx *gorm.DB) (err error) {
+	p.SizeParams = []uint{p.Width, p.Height, p.Length}
+	slices.Sort(p.SizeParams)
 
-	response := db.Find(&allParcels)
-	if response.Error != nil {
-		panic(response.Error)
-	} else if response.RowsAffected == 0 {
-		panic(errors.New("There are no parcel types provided for config."))
-	}
+	return
+}
 
-	parcelsConfig = make([]Parcel, 0, len(allParcels)-1)
+func (pc ParcelsConfig) CalulatePrice(widht, height, length uint) uint {
+	var position = []uint{widht, height, length}
+	slices.Sort(position)
 
-	for _, parcel := range allParcels {
-		if parcel.IsOverSize {
-			undefinedParcleSizePrice = parcel.Price
-		} else {
-			parcelsConfig = append(parcelsConfig, parcel)
+	for _, parcelConfig := range pc.ParcelTypes {
+		if parcelConfig.SizeParams[0] >= position[0] && parcelConfig.SizeParams[1] >= position[1] && parcelConfig.SizeParams[2] >= position[2] {
+			return parcelConfig.Price
 		}
 	}
 
-	if undefinedParcleSizePrice == 0 {
-		panic("There is no 'Undefined Size' parcel config provided or its price value is 0.")
+	return pc.OverSizePrice
+}
+
+func createTestParcelConfigs(countries []Country) []ParcelsConfig {
+	var configs []ParcelsConfig
+
+	basePriceCents := uint(7000) // Base price for 20x20x20 cm
+	documentsPrice := uint(6000) // Price for documents
+
+	// Define six parcel sizes, increasing by 15 cm each step
+	sizes := []struct {
+		height uint
+		width  uint
+		length uint
+	}{
+		{20, 20, 20}, // Small / Usual
+		{35, 35, 35}, // Medium
+		{50, 50, 50}, // Large
+		{65, 65, 65}, // XL
+		{80, 80, 80}, // XXL
+		{2, 25, 35},  // Documents
 	}
 
-	slices.SortFunc(parcelsConfig, func(a, b Parcel) int {
-		switch {
-		case a.Price < b.Price:
-			return -1
-		case a.Price > b.Price:
-			return 1
-		default:
-			return 0
-		}
-	})
-}
+	for i, country := range countries {
+		// Price multiplier based on “distance” (index difference from Ukraine)
+		distanceFactor := 1.0 + (float64(i) * 0.1)
 
-type ParcelPposition struct {
-	Height, Width, Length int
-}
+		var parcels []Parcel
+		for j, size := range sizes {
+			price := uint(float64(basePriceCents) * distanceFactor)
+			pType := UssualParcelType
 
-func CalulatePrice(positions []ParcelPposition) uint {
-	for _, parcel := range parcelsConfig {
-		for _, position := range positions {
-			if parcel.Width >= position.Width && parcel.Height >= position.Height && parcel.Length >= position.Length {
-				return parcel.Price
+			if j == len(sizes)-1 { // Last size is documents
+				price = documentsPrice
+				pType = Documents
+			} else {
+				// Optional: Increase price for larger parcels proportionally
+				price = uint(float64(price) * (1.0 + float64(j)*0.2))
 			}
+
+			parcels = append(parcels, Parcel{
+				ID:             uuid.New(),
+				Type:           pType,
+				Height:         size.height,
+				Width:          size.width,
+				Length:         size.length,
+				Price:          price,
+				ParcelConfigID: uuid.New(),
+			})
 		}
+
+		config := ParcelsConfig{
+			ID:            uuid.New(),
+			CountryID:     country.ID,
+			ParcelTypes:   parcels,
+			OverSizePrice: uint(float64(basePriceCents)*distanceFactor) + 3000,
+		}
+
+		configs = append(configs, config)
 	}
 
-	return undefinedParcleSizePrice
-}
-
-func ParcelConfigTestData() []Parcel {
-	return []Parcel{
-		{
-			ID:         uuid.New(),
-			IsOverSize: false,
-			Height:     10,   // cm
-			Width:      15,   // cm
-			Length:     20,   // cm
-			Price:      5000, // €50.00
-		},
-		{
-			ID:         uuid.New(),
-			IsOverSize: false,
-			Height:     20,
-			Width:      25,
-			Length:     35,
-			Price:      7500, // €75.00
-		},
-		{
-			ID:         uuid.New(),
-			IsOverSize: false,
-			Height:     30,
-			Width:      40,
-			Length:     50,
-			Price:      10000, // €100.00
-		},
-		{
-			ID:         uuid.New(),
-			IsOverSize: false,
-			Height:     40,
-			Width:      50,
-			Length:     70,
-			Price:      13000, // €130.00
-		},
-		{
-			ID:         uuid.New(),
-			IsOverSize: false,
-			Height:     60,
-			Width:      60,
-			Length:     100,
-			Price:      18000, // €180.00
-		},
-		{
-			ID:         uuid.New(),
-			IsOverSize: true,
-			Height:     0,
-			Width:      0,
-			Length:     0,
-			Price:      25000, // €250.00 fallback price
-		},
-	}
+	return configs
 }

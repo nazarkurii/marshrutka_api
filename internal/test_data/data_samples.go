@@ -1,7 +1,6 @@
 package testdata
 
 import (
-	"fmt"
 	"maryan_api/config"
 	"maryan_api/internal/entity"
 	"math/rand"
@@ -28,21 +27,12 @@ import (
 // nazar@debian:~$ mysql -h marshrutka-marshrutka.i.aivencloud.com   -u avnadmin   -p -D defaultdb  -P 27657   --ssl-ca=/home/nazar/nazar/marshrutka/api/certificates/ca.pem
 
 func CreateTestData(db *gorm.DB) {
-	err := db.Create(config.CountriesConfigTestData()).Error
+	err := db.Create(config.CreateTestData()).Error
 	if err != nil {
 		panic(err)
 	}
-	err = db.Create(config.LuggageConfigTestData()).Error
-	if err != nil {
-		panic(err)
-	}
-	err = db.Create(config.ParcelConfigTestData()).Error
-	if err != nil {
-		panic(err)
-	}
+
 	config.LoadCountriesConfig(db)
-	config.LoadLuggageConfig(db)
-	config.LoadLuggageConfig(db)
 
 	drivers := entity.TestDrivers()
 	err = db.Create(drivers).Error
@@ -62,14 +52,11 @@ func CreateTestData(db *gorm.DB) {
 		panic(err)
 	}
 
+	countries, masterCountry := config.GetConfig()
+
 	var line = 100
-	countries, ukraineID := config.GetCountriesConfig()
 	var busIndex int
-	fmt.Println(len(countries))
-	for _, countryID := range countries {
-		if countryID == ukraineID {
-			continue
-		}
+	for _, country := range countries {
 
 		departureTime := time.Now()
 		var trips = make([]entity.Trip, 50)
@@ -84,8 +71,8 @@ func CreateTestData(db *gorm.DB) {
 					ID:                   outboundConnectionID,
 					Line:                 line,
 					Price:                (rand.Intn(250) + 100) * 100,
-					DepartureCountryID:   ukraineID,
-					DestinationCountryID: countryID,
+					DepartureCountryID:   masterCountry.ID,
+					DestinationCountryID: country.ID,
 					DepartureTime:        departureTime.UTC(),
 					ArrivalTime:          departureTime.Add(time.Hour*15 + time.Hour*time.Duration(rand.Intn(20))).UTC(),
 					BusID:                buses[busIndex].ID,
@@ -104,8 +91,8 @@ func CreateTestData(db *gorm.DB) {
 					ID:                   returnConnectionID,
 					Line:                 line,
 					Price:                (rand.Intn(250) + 100) * 100,
-					DepartureCountryID:   countryID,
-					DestinationCountryID: ukraineID,
+					DepartureCountryID:   country.ID,
+					DestinationCountryID: masterCountry.ID,
 					DepartureTime:        departureTime.Add(time.Hour * 60).UTC(),
 					ArrivalTime:          departureTime.Add(time.Hour*60 + time.Hour*15 + time.Hour*time.Duration(rand.Intn(20))).UTC(),
 					BusID:                buses[busIndex].ID,

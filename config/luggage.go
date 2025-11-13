@@ -1,94 +1,76 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/d3code/uuid"
-	"gorm.io/gorm"
+	"golang.org/x/exp/rand"
 )
 
 type Luggage struct {
-	ID     uuid.UUID   `gorm:"type:binary(16);primaryKey" json:"-"`
-	Type   luggageType `gorm:"type:enum('Small','Medium','Large'); not null"  json:"type"`
-	Height uint        `gorm:"type:SMALLINT UNSIGNED;not null"  json:"height"`
-	Width  uint        `gorm:"type:SMALLINT UNSIGNED;not null"  json:"width"`
-	Length uint        `gorm:"type:SMALLINT UNSIGNED;not null"  json:"length"`
-	Price  uint        `gorm:"type:INT UNSIGNED;not null"  json:"price"`
+	ID     uuid.UUID `gorm:"type:binary(16);primaryKey" json:"-"`
+	Height uint      `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Width  uint      `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Length uint      `gorm:"type:SMALLINT UNSIGNED;not null"`
+	Price  uint      `gorm:"type:INT UNSIGNED;not null"`
 }
 
-var luggageConfig = struct {
-	Small  Luggage
-	Medium Luggage
-	Large  Luggage
-}{}
+type LuggageConfig struct {
+	ID        uuid.UUID `gorm:"type:binary(16);primaryKey" json:"-"`
+	CountryID uuid.UUID `gorm:"type:binary(16);uniqueIndex" json:"-"`
 
-type luggageType string
+	SmallID uuid.UUID `gorm:"type:binary(16)" json:"-"`
+	Small   Luggage   `gorm:"foreignKey:SmallID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
 
-const (
-	SmallLuggageType  luggageType = "Small"
-	MediumLuggageType luggageType = "Medium"
-	LargeLuggageType  luggageType = "Large"
-)
+	MediumID uuid.UUID `gorm:"type:binary(16)" json:"-"`
+	Medium   Luggage   `gorm:"foreignKey:MediumID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
 
-func getLuggagePointerByType(luggageType luggageType) *Luggage {
-	switch luggageType {
-	case SmallLuggageType:
-		return &luggageConfig.Small
-	case MediumLuggageType:
-		return &luggageConfig.Medium
-	case LargeLuggageType:
-		return &luggageConfig.Large
-	default:
-		return nil
-	}
+	LargeID uuid.UUID `gorm:"type:binary(16)" json:"-"`
+	Large   Luggage   `gorm:"foreignKey:LargeID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
 }
 
-func LoadLuggageConfig(db *gorm.DB) {
-	var luggageDB []Luggage
+func createTestLuggageConfigs(countries []Country) []LuggageConfig {
 
-	response := db.Find(&luggageDB)
-	if response.Error != nil {
-		panic(response.Error)
-	} else if response.RowsAffected < 3 {
-		panic(fmt.Errorf("Not enough luggage types: %v", response.RowsAffected))
-	}
+	var luggageConfigs []LuggageConfig
 
-	for _, luggage := range luggageDB {
-		luggageCongigPointer := getLuggagePointerByType(luggage.Type)
-		*luggageCongigPointer = luggage
-	}
+	for _, country := range countries {
+		// Randomized price base per country
+		basePrice := uint(2000 + rand.Intn(3000)) // 20–50 EUR (in cents)
 
-}
-
-func GetLuggageConfig() (Luggage, Luggage, Luggage) {
-	return luggageConfig.Small, luggageConfig.Medium, luggageConfig.Large
-}
-
-func LuggageConfigTestData() []Luggage {
-	return []Luggage{
-		{
+		small := Luggage{
 			ID:     uuid.New(),
-			Type:   SmallLuggageType,
-			Height: 55, // cm
-			Width:  40,
+			Height: 40,
+			Width:  25,
 			Length: 20,
-			Price:  3000, // €30.00
-		},
-		{
+			Price:  basePrice,
+		}
+
+		medium := Luggage{
 			ID:     uuid.New(),
-			Type:   MediumLuggageType,
-			Height: 65,
-			Width:  45,
-			Length: 25,
-			Price:  5000, // €50.00
-		},
-		{
-			ID:     uuid.New(),
-			Type:   LargeLuggageType,
-			Height: 75,
-			Width:  55,
+			Height: 60,
+			Width:  40,
 			Length: 30,
-			Price:  7000, // €70.00
-		},
+			Price:  basePrice + 2000,
+		}
+
+		large := Luggage{
+			ID:     uuid.New(),
+			Height: 80,
+			Width:  50,
+			Length: 40,
+			Price:  basePrice + 4000,
+		}
+
+		config := LuggageConfig{
+			ID:        uuid.New(),
+			CountryID: country.ID,
+			SmallID:   small.ID,
+			MediumID:  medium.ID,
+			LargeID:   large.ID,
+			Small:     small,
+			Medium:    medium,
+			Large:     large,
+		}
+		luggageConfigs = append(luggageConfigs, config)
 	}
+
+	return luggageConfigs
 }
