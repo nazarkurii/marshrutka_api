@@ -40,7 +40,7 @@ func main() {
 			http.StatusOK, struct {
 				Message string
 			}{
-				"Hello, World CI/CD!",
+				"Hello, World CI/CD TEST!",
 			},
 		)
 	})
