@@ -112,14 +112,6 @@ func BadRequest(problemType, title, detail string, invalidParams ...InvalidParam
 	return New(http.StatusBadRequest, problemType, title, detail, invalidParams...)
 }
 
-func BadRequestSimplified(problemType, title, detail string, invalidParams ...InvalidParam) Problem {
-	return New(http.StatusBadRequest, problemType, title, detail, invalidParams...)
-}
-
-func NonExistingResourse(problemType, title, detail string, invalidParams ...InvalidParam) Problem {
-	return New(http.StatusBadRequest, problemType, title, detail, invalidParams...)
-}
-
 func Unauthorized(problemType, title, detail string, invalidParams ...InvalidParam) Problem {
 	return New(http.StatusUnauthorized, problemType, title, detail, invalidParams...)
 }

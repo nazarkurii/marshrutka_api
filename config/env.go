@@ -11,7 +11,9 @@ import (
 func LoadConfig(path string) {
 	err := godotenv.Load(path)
 	if err != nil {
-		fmt.Println("env non loaded: ", err.Error())
+		if os.Getenv("GINMODE") != "release" {
+			fmt.Println("env non loaded: ", err.Error())
+		}
 	}
 }
 
@@ -122,4 +124,8 @@ func GoogleSecretKey() string {
 
 func GooglePlacesApiKey() string {
 	return mustGetEnv("GOOGLE_PLACES_API_KEY")
+}
+
+func RootPath() string {
+	return mustGetEnv("ROOT")
 }

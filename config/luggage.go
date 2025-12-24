@@ -2,75 +2,61 @@ package config
 
 import (
 	"github.com/d3code/uuid"
-	"golang.org/x/exp/rand"
 )
 
 type Luggage struct {
-	ID     uuid.UUID `gorm:"type:binary(16);primaryKey" json:"-"`
-	Height uint      `gorm:"type:SMALLINT UNSIGNED;not null"`
-	Width  uint      `gorm:"type:SMALLINT UNSIGNED;not null"`
-	Length uint      `gorm:"type:SMALLINT UNSIGNED;not null"`
-	Price  uint      `gorm:"type:INT UNSIGNED;not null"`
+	ID     uuid.UUID
+	Height uint
+	Width  uint
+	Length uint
+	Volume int
+	Price  uint
 }
 
 type LuggageConfig struct {
-	ID        uuid.UUID `gorm:"type:binary(16);primaryKey" json:"-"`
-	CountryID uuid.UUID `gorm:"type:binary(16);uniqueIndex" json:"-"`
-
-	SmallID uuid.UUID `gorm:"type:binary(16)" json:"-"`
-	Small   Luggage   `gorm:"foreignKey:SmallID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
-
-	MediumID uuid.UUID `gorm:"type:binary(16)" json:"-"`
-	Medium   Luggage   `gorm:"foreignKey:MediumID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
-
-	LargeID uuid.UUID `gorm:"type:binary(16)" json:"-"`
-	Large   Luggage   `gorm:"foreignKey:LargeID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
+	Small  Luggage
+	Medium Luggage
+	Large  Luggage
 }
 
-func createTestLuggageConfigs(countries []Country) []LuggageConfig {
+var luggageConfig = createTestLuggageConfig()
 
-	var luggageConfigs []LuggageConfig
+func createTestLuggageConfig() LuggageConfig {
 
-	for _, country := range countries {
-		// Randomized price base per country
-		basePrice := uint(2000 + rand.Intn(3000)) // 20–50 EUR (in cents)
-
-		small := Luggage{
-			ID:     uuid.New(),
-			Height: 40,
-			Width:  25,
-			Length: 20,
-			Price:  basePrice,
-		}
-
-		medium := Luggage{
-			ID:     uuid.New(),
-			Height: 60,
-			Width:  40,
-			Length: 30,
-			Price:  basePrice + 2000,
-		}
-
-		large := Luggage{
-			ID:     uuid.New(),
-			Height: 80,
-			Width:  50,
-			Length: 40,
-			Price:  basePrice + 4000,
-		}
-
-		config := LuggageConfig{
-			ID:        uuid.New(),
-			CountryID: country.ID,
-			SmallID:   small.ID,
-			MediumID:  medium.ID,
-			LargeID:   large.ID,
-			Small:     small,
-			Medium:    medium,
-			Large:     large,
-		}
-		luggageConfigs = append(luggageConfigs, config)
+	small := Luggage{
+		ID:     uuid.New(),
+		Height: 40,
+		Width:  20,
+		Length: 30,
+		Volume: 40 * 20 * 30,
+		Price:  3000,
 	}
 
-	return luggageConfigs
+	medium := Luggage{
+		ID:     uuid.New(),
+		Height: 50,
+		Width:  40,
+		Length: 30,
+		Volume: 40 * 50 * 30,
+		Price:  5000,
+	}
+
+	large := Luggage{
+		ID:     uuid.New(),
+		Height: 100,
+		Width:  50,
+		Length: 40,
+		Volume: 40 * 100 * 50,
+		Price:  7000,
+	}
+
+	return LuggageConfig{
+		Small:  small,
+		Medium: medium,
+		Large:  large,
+	}
+}
+
+func GetLoggageConfig() LuggageConfig {
+	return luggageConfig
 }

@@ -1,7 +1,6 @@
 package dataStore
 
 import (
-	"maryan_api/config"
 	"maryan_api/internal/entity"
 	"maryan_api/internal/valueobject"
 	"maryan_api/pkg/log"
@@ -16,7 +15,6 @@ func Migrate(db *gorm.DB) error {
 		}
 	}
 
-	errCheck(config.Migrate(db))
 	errCheck(entity.MigrateUser(db))
 	errCheck(entity.MigrateBus(db))
 	errCheck(entity.MigratePassenger(db))
@@ -28,6 +26,6 @@ func Migrate(db *gorm.DB) error {
 	errCheck(entity.MigrateTicket(db))
 
 	errCheck(entity.MigrateConnection(db))
-	testdata.CreateTestData(db)
+	// testdata.CreateTestData(db)
 	return nil
 }

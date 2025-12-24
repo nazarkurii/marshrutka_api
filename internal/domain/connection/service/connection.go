@@ -187,7 +187,8 @@ func (c *customerService) GetByID(ctx context.Context, connectionIDStr string, p
 		return entity.CustomerConnection{}, err
 	}
 
-	return connection.ToCustomer(takedSeatsIDs), nil
+	luggage := config.GetLoggageConfig()
+	return connection.ToCustomer(takedSeatsIDs, int(luggage.Small.Price), int(luggage.Medium.Price), int(luggage.Large.Price)), nil
 }
 
 func (c *customerService) GetConnections(ctx context.Context, userID uuid.UUID, paginationStr dbutil.PaginationStr, completed string) ([]entity.CustomerConnection, hypermedia.Links, error) {
@@ -198,7 +199,7 @@ func (c *customerService) GetConnections(ctx context.Context, userID uuid.UUID, 
 
 	var connectionsCustomer = make([]entity.CustomerConnection, len(connections))
 	for i, connection := range connections {
-		connectionsCustomer[i] = connection.ToCustomer(nil)
+		connectionsCustomer[i] = connection.ToCustomer(nil, 0, 0, 0)
 	}
 
 	return connectionsCustomer, urls, nil

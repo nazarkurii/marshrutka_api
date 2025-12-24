@@ -3,7 +3,6 @@ package http
 import (
 	"maryan_api/internal/domain/adress/repo"
 	"maryan_api/internal/domain/adress/service"
-	"maryan_api/internal/infrastructure/clients/payment"
 	"maryan_api/pkg/auth"
 	ginutil "maryan_api/pkg/ginutils"
 	"maryan_api/pkg/hypermedia"
@@ -13,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client, payment payment.Payment) {
+func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
 	handler := newAddressHandler(service.NewAddressService(repo.NewAddressRepo(db), client))
 
 	customerRouter := ginutil.CreateAuthRouter("/customer", auth.Customer.SecretKey(), s)

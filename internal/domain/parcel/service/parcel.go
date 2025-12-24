@@ -12,6 +12,7 @@ import (
 	rfc7807 "maryan_api/pkg/problem"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/d3code/uuid"
@@ -26,6 +27,7 @@ type Parcel interface {
 	PurchaseSucceded(ctx context.Context, sessionID, token string) error
 	PurchaseFailed(ctx context.Context, sessionID, token string) error
 	GetParcels(ctx context.Context, paginationStr dbutil.PaginationStr, userID uuid.UUID) ([]entity.CustomerParcel, hypermedia.Links, error)
+	GetConnectionByID(ctx context.Context, idStr, widthStr, heightStr, lengthStr string) (entity.CustomerConnection, error)
 }
 
 type serviceImpl struct {
@@ -69,7 +71,8 @@ func buildCurrentMonth(req entity.FindParcelConnectionsRequestParsed, bestPerDay
 		weekday := normalizeWeekday(date.Weekday())
 
 		if value, ok := bestPerDay[dayNum]; ok {
-			connections[i] = value.ToParcelConnection(true, weekday, dayNum, true)
+			connections[i] = value.ToParcelConnection(true, weekday, dayNum, true, int(config.CalulateParcelPrice(uint(req.Width), uint(req.Height), uint(req.Length))))
+
 		} else {
 			connections[i] = entity.ConnectionParcel{
 				Usable:         false,
@@ -187,7 +190,7 @@ func (s *serviceImpl) GetParcels(ctx context.Context, paginationStr dbutil.Pagin
 
 		respose[i] = entity.CustomerParcel{
 			Parcel:     parcel,
-			Connection: connections[connectionIndex].ToCustomer(nil),
+			Connection: connections[connectionIndex].ToCustomer(nil, 0, 0, 0),
 		}
 	}
 
@@ -201,14 +204,23 @@ func (s *serviceImpl) PurchaseFailed(ctx context.Context, sessionID, token strin
 	}
 	err = stripe.CancelPaymentIntent(sessionID)
 	if err != nil {
+
 		return rfc7807.BadGateway("payment-cancelation",
 			"Payment Cancelation Error", err.Error())
 	}
 	err = s.repo.RemoveParcelStops(ctx, sessionID)
 	if err != nil {
+
 		return err
 	}
-	return s.repo.DeleteParcels(ctx, sessionID)
+
+	err = s.repo.DeleteParcels(ctx, sessionID)
+	if err != nil {
+
+		return err
+	}
+
+	return nil
 }
 
 func (s *serviceImpl) PurchaseSucceded(ctx context.Context, sessionID, token string) error {
@@ -257,8 +269,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		return "", err
 	}
 
-	parcelCost := 0
-	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(parcelCost), "/connection/purchase-parcel", token)
+	redirectURL, sessionID, err := stripe.CreateStripeCheckoutSession(int64(config.CalulateParcelPrice(uint(req.Height), uint(req.Length), uint(req.Width))), "/connection/purchase-parcel", token)
 	if err != nil {
 		return "", rfc7807.BadGateway("payment", "Payment Error", err.Error())
 	}
@@ -289,7 +300,7 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		DropOffAdress:     dropOffAdress,
 		Payment: entity.ParcelPayment{
 			ParcelID:  parcelID,
-			Price:     parcelCost,
+			Price:     int(config.CalulateParcelPrice(uint(req.Height), uint(req.Length), uint(req.Width))),
 			Method:    entity.PaymentMethodCard,
 			SessionID: sessionID,
 		},
@@ -312,6 +323,35 @@ func (s *serviceImpl) Purchase(ctx context.Context, userID uuid.UUID, connection
 		return "", err
 	}
 	return redirectURL, nil
+}
+
+func (c *serviceImpl) GetConnectionByID(ctx context.Context, idStr, widthStr, heightStr, lengthStr string) (entity.CustomerConnection, error) {
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return entity.CustomerConnection{}, rfc7807.BadRequest("parsing", "Parsing Error", err.Error())
+	}
+	width, err := strconv.Atoi(widthStr)
+	if err != nil {
+		return entity.CustomerConnection{}, rfc7807.BadRequest("parsing", "Parsing Error", err.Error())
+	}
+	height, err := strconv.Atoi(heightStr)
+	if err != nil {
+		return entity.CustomerConnection{}, rfc7807.BadRequest("parsing", "Parsing Error", err.Error())
+	}
+	length, err := strconv.Atoi(lengthStr)
+	if err != nil {
+		return entity.CustomerConnection{}, rfc7807.BadRequest("parsing", "Parsing Error", err.Error())
+	}
+
+	connetion, err := c.repo.GetConnectionByID(ctx, id)
+	if err != nil {
+		return entity.CustomerConnection{}, err
+	}
+
+	customeConnection := connetion.ToCustomer(nil, 0, 0, 0)
+	customeConnection.Price = int(config.CalulateParcelPrice(uint(width), uint(height), uint(length)))
+	return customeConnection, nil
 }
 
 func NewParcelService(repo repo.Parcel, client *http.Client) Parcel {

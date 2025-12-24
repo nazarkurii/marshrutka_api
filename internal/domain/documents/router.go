@@ -1,7 +1,7 @@
 package documents
 
 import (
-	"maryan_api/internal/infrastructure/clients/payment"
+	"maryan_api/config"
 	ginutil "maryan_api/pkg/ginutils"
 	"net/http"
 
@@ -9,9 +9,9 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client, payment payment.Payment) {
+func RegisterRoutes(db *gorm.DB, s *gin.Engine, client *http.Client) {
 	//-----------------------Trip Routes---------------------------------------
 	var customer = s.Group("/customer")
-	customer.GET("/legal-documents-uk.pdf", ginutil.ServeFileAttachment("../../static/pdf/legal-policy-uk.pdf", "legal-policy-uk.pdf"))
-	customer.GET("/legal-documents-en.pdf", ginutil.ServeFileAttachment("../../static/pdf/legal-policy-en.pdf", "legal-policy-en.pdf"))
+	customer.GET("/legal-documents-uk.pdf", ginutil.ServeFileAttachment(config.RootPath()+"/static/pdf/legal-policy-uk.pdf", "legal-policy-uk.pdf"))
+	customer.GET("/legal-documents-en.pdf", ginutil.ServeFileAttachment(config.RootPath()+"/static/pdf/legal-policy-en.pdf", "legal-policy-en.pdf"))
 }

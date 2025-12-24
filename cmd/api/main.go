@@ -2,11 +2,12 @@ package main
 
 import (
 	"maryan_api/config"
-	"maryan_api/internal/infrastructure/clients/payment"
+	"maryan_api/internal/infrastructure/clients/stripe"
 	dataStore "maryan_api/internal/infrastructure/persistence"
 	"maryan_api/internal/infrastructure/router"
 	"maryan_api/pkg/languages"
 	"maryan_api/pkg/timezone"
+	"os"
 
 	"net/http"
 
@@ -20,11 +21,9 @@ func main() {
 
 	db := dataStore.Init()
 	dataStore.Migrate(db)
-	config.LoadCountriesConfig(db)
-	config.LoadLuggageConfig(db)
-	config.LoadLuggageConfig(db)
+	config.LoadCountries(db)
 
-	payment := payment.Init()
+	stripe.InitStripe()
 	server := gin.Default()
 	server.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
@@ -34,7 +33,7 @@ func main() {
 
 	server.Use(languages.GinMiddlewear)
 	client := http.DefaultClient
-	router.RegisterRoutes(server, db, client, payment)
+	router.RegisterRoutes(server, db, client)
 	server.Static("/imgs", "../../static/images")
 	server.GET("", func(ctx *gin.Context) {
 		ctx.JSON(
@@ -47,5 +46,5 @@ func main() {
 	})
 	gin.SetMode(gin.ReleaseMode)
 
-	server.Run(":9990")
+	server.Run(os.Getenv("PORT"))
 }

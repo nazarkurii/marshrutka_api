@@ -92,7 +92,7 @@ func (ds *connectionMySQL) findBaseConnections(
 			Preload(clause.Associations).
 			Where(
 				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) = ? AND destination_country_id = ? AND departure_country_id = ?",
-				config.MustGetLocationByCountryID(request.From).String(),
+				config.MustGetLocationFromCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
@@ -145,7 +145,7 @@ func (ds *connectionMySQL) findLeftRange(
 			).
 			Where(
 				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) < DATE(?) AND destination_country_id = ? AND departure_country_id = ?",
-				config.MustGetLocationByCountryID(request.From).String(),
+				config.MustGetLocationFromCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
@@ -173,7 +173,7 @@ func (ds *connectionMySQL) findRightRange(
 			).
 			Where(
 				"DATE(CONVERT_TZ(departure_time, 'UTC', ?)) > ? AND destination_country_id = ? AND departure_country_id = ?",
-				config.MustGetLocationByCountryID(request.From).String(),
+				config.MustGetLocationFromCountryID(request.From).String(),
 				request.Date.Format("2006-01-02"),
 				request.To,
 				request.From,
@@ -213,7 +213,8 @@ func (ds *connectionMySQL) GetByID(ctx context.Context, id uuid.UUID, passengers
 	if busSeats < passengersNumber {
 		return entity.Connection{}, nil, rfc7807.BadRequest("too-big-passengers-number", "Too Big Passengers Number Error", fmt.Sprintf("For this connections maximum is %s.", busSeats-takenSeatsLength))
 	}
-	connection.LuggageVolumeLeft = uint(connection.Bus.LuggageVolume) - takenLuggageVolume - uint((busSeats)-takenSeatsLength+passengersNumber)*(config.BackpackVolume+config.LargeLuggageVolume)
+	luggageConfig := config.GetLoggageConfig()
+	connection.LuggageVolumeLeft = uint(connection.Bus.LuggageVolume) - takenLuggageVolume - uint((busSeats)-takenSeatsLength+passengersNumber)*(uint(luggageConfig.Small.Volume)+uint(luggageConfig.Large.Volume))
 
 	return connection, takenSeatsIDs, nil
 }

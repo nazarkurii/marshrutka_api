@@ -1,79 +1,102 @@
 package config
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/d3code/uuid"
 	"gorm.io/gorm"
 )
 
-type Country struct {
-	ID            uuid.UUID      `gorm:"type:binary(16);primaryKey"`
-	Name          string         `gorm:"type:varchar(50);not null;unique"`
-	IsMaster      bool           `gorm:"not null"`
-	DeletedAt     gorm.DeletedAt `gorm:"index"`
-	LuggageConfig LuggageConfig  `gorm:"foreignKey:CountryID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
-	ParcelsConfig ParcelsConfig  `gorm:"foreignKey:CountryID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
-}
+var countries = map[string]uuid.UUID{}
 
-var countriesConfig = map[uuid.UUID]Country{}
-var masterCountry Country
+func LoadCountries(db *gorm.DB) {
 
-func LoadCountriesConfig(db *gorm.DB) {
-	var countriesDB []Country
-
-	response := db.Table("countries").Find(&countriesDB)
-	if response.Error != nil {
-		panic(response.Error)
-	} else if response.RowsAffected == 0 {
-		panic("There are no countriesConfig provitded for the config.")
+	var countriesSlice []struct {
+		ID   uuid.UUID
+		Name string
 	}
 
-	for _, country := range countriesDB {
-		if country.IsMaster {
-			if masterCountry.ID != uuid.Nil {
-				panic("There has to be only one master country (Dublicate Master Country Error).")
-			} else {
-				masterCountry = country
-			}
+	err := db.Table("countries").Select("id", "name").Scan(&countriesSlice).Error
+	if err != nil {
+		panic(err)
+	}
+
+	for _, country := range countriesSlice {
+		countries[country.Name] = country.ID
+	}
+}
+
+func ParseCountry(country string) (uuid.UUID, *time.Location, error) {
+	id, ok := countries[country]
+	if !ok {
+		return uuid.Nil, nil, fmt.Errorf("Non-existing country")
+	}
+	location, err := countryToLocation(country)
+
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("Non-existing time location")
+	}
+
+	return id, location, nil
+}
+
+func MustParseToLocal(date time.Time, country string) time.Time {
+	location, _ := countryToLocation(country)
+
+	return date.In(location)
+}
+
+func MustParseToLocalByUUID(date time.Time, country uuid.UUID) time.Time {
+	var name string
+	for coutryName, countryID := range countries {
+		if countryID == country {
+			name = coutryName
+			break
 		}
-		countriesConfig[country.ID] = country
 	}
+	location, _ := countryToLocation(name)
+
+	return date.In(location)
 }
 
-func countriesConfigTestData() []Country {
-	return []Country{
-		{ID: uuid.New(), Name: "Poland", IsMaster: false},
-		{ID: uuid.New(), Name: "Germany", IsMaster: false},
-		{ID: uuid.New(), Name: "Czechia", IsMaster: false},
-		{ID: uuid.New(), Name: "Estonia", IsMaster: false},
-		{ID: uuid.New(), Name: "Latvia", IsMaster: false},
-		{ID: uuid.New(), Name: "Lithuania", IsMaster: false},
-		{ID: uuid.New(), Name: "Slovakia", IsMaster: false},
-		{ID: uuid.New(), Name: "Hungary", IsMaster: false},
-		{ID: uuid.New(), Name: "Ukraine", IsMaster: true},
-	}
-}
-
-func CreateTestData() []Country {
-	countries := countriesConfigTestData()
-	luggages := createTestLuggageConfigs(countries)
-	parcels := createTestParcelConfigs(countries)
-	for i := range countries {
-		countries[i].LuggageConfig = luggages[i]
-		countries[i].ParcelsConfig = parcels[i]
+func countryToLocation(country string) (*time.Location, error) {
+	mapping := map[string]string{
+		"Germany":   "Europe/Berlin",
+		"Poland":    "Europe/Warsaw",
+		"Czechia":   "Europe/Prague",
+		"Estonia":   "Europe/Tallinn",
+		"Latvia":    "Europe/Riga",
+		"Lithuania": "Europe/Vilnius",
+		"Slovakia":  "Europe/Bratislava",
+		"Hungary":   "Europe/Budapest",
+		"Ukraine":   "Europe/Kyiv",
 	}
 
-	return countries
+	if tz, ok := mapping[country]; ok {
+		return time.LoadLocation(tz)
+	}
+	return nil, fmt.Errorf("unsupported country: %s", country)
 }
 
-func GetConfig() (map[uuid.UUID]Country, Country) {
-	return countriesConfig, masterCountry
+func MustGetLocationFromCountryID(id uuid.UUID) *time.Location {
+	var name string
+	for coutryName, countryID := range countries {
+		if countryID == id {
+			name = coutryName
+			break
+		}
+	}
+	location, _ := countryToLocation(name)
+
+	return location
 }
 
-func GetCountryByID(countryID uuid.UUID) (Country, bool) {
-	country, ok := countriesConfig[countryID]
-	return country, ok
-}
+func GetCountries() (map[string]uuid.UUID, uuid.UUID) {
+	var countriesCopy = map[string]uuid.UUID{}
+	for name, id := range countries {
+		countriesCopy[name] = id
+	}
 
-func MustGetCountryByID(countryID uuid.UUID) Country {
-	return countriesConfig[countryID]
+	return countriesCopy, countriesCopy["Ukraine"]
 }
