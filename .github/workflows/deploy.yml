@@ -39,6 +39,7 @@ jobs:
         key: ${{ secrets.DO_SSH_KEY }}
         script: |
           cd ~/marshrutka/deployment
+          git pull origin main
           docker compose pull
           docker compose up -d
           docker image prune -f
